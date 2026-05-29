@@ -17,10 +17,11 @@ type TPLink struct {
 // ErrNotImplemented is returned by stub methods pending data collection.
 var ErrNotImplemented = fmt.Errorf("not yet implemented")
 
-// New creates a TPLink client with TLS verification disabled for self-signed switch certs.
-func New() *TPLink {
+// New creates a TPLink client. Set insecure=true only when the switch uses a
+// self-signed cert and the operator accepts the MITM risk on their LAN.
+func New(insecure bool) *TPLink {
 	return &TPLink{
-		http: httpclient.New(httpclient.Options{SkipTLSVerify: true}),
+		http: httpclient.New(httpclient.Options{SkipTLSVerify: insecure}),
 	}
 }
 
