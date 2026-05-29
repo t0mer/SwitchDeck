@@ -31,7 +31,7 @@ func main() {
 
 	cfg.DBPath = cfg.DataDir + "/switchdeck.db"
 
-	st, err := store.NewSQLiteStore(cfg.DBPath)
+	st, err := store.Open(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("failed to open store: %v", err)
 	}
