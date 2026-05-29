@@ -66,10 +66,10 @@ func (w *worker) run() {
 	if err := w.client.Login(ctx, "http://"+w.cfg.IP, w.cfg.Username, w.cfg.Password); err != nil {
 		log.Printf("manager[%s]: login: %v", w.cfg.ID, err)
 		w.onErr(w.cfg.ID, err)
+	} else {
+		// Initial full collection immediately on start — only when login succeeded.
+		w.collectFull(ctx)
 	}
-
-	// Initial full collection immediately on start
-	w.collectFull(ctx)
 
 	statsDur := time.Duration(w.cfg.PollStatsSecs) * time.Second
 	configDur := time.Duration(w.cfg.PollConfigSecs) * time.Second
