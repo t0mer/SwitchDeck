@@ -1,0 +1,19 @@
+{
+  "_comment": "Sanitized fixture: 802.1Q VLAN disabled on real switch; this shows a configured example.",
+  "endpoint": "/Vlan8021QRpm.htm",
+  "js_vars": {
+    "qvlan_ds": {
+      "state":     1,
+      "portNum":   8,
+      "maxVids":   32,
+      "count":     2,
+      "vids":      [10, 20],
+      "names":     ["Management", "Servers"],
+      "tagMbrs":   ["0x02", "0x04"],
+      "untagMbrs": ["0x01", "0x02"],
+      "lagIds":    [0,0,0,0,0,0,0,0],
+      "lagMbrs":   [0,"0x0","0x0"]
+    }
+  },
+  "_bitmask_notes": "0x01=port1, 0x02=port2, 0x04=port3, 0x08=port4, 0x10=port5, 0x20=port6, 0x40=port7, 0x80=port8"
+}
