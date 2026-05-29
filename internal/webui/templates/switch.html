@@ -1,0 +1,36 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="page-header-left">
+    <a href="/" class="back-link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      Switches
+    </a>
+    <div>
+      <div class="page-title" id="sw-name">Loading…</div>
+    </div>
+    <div id="sw-status"></div>
+  </div>
+  <div class="btn-actions">
+    <button id="btn-collect" class="btn btn-secondary">Collect Now</button>
+    <button id="btn-reboot"  class="btn btn-danger">Reboot</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn" data-tab="system">System</button>
+  <button class="tab-btn" data-tab="ports">Ports</button>
+  <button class="tab-btn" data-tab="stats">Statistics</button>
+  <button class="tab-btn" data-tab="vlans">VLANs</button>
+  <button class="tab-btn" data-tab="poe">PoE</button>
+</div>
+
+<div id="switch-detail" data-switch-id="{{.SwitchID}}" class="page-content">
+  <div id="tab-system"  class="tab-panel"></div>
+  <div id="tab-ports"   class="tab-panel"></div>
+  <div id="tab-stats"   class="tab-panel"></div>
+  <div id="tab-vlans"   class="tab-panel"></div>
+  <div id="tab-poe"     class="tab-panel"></div>
+</div>
+{{end}}
