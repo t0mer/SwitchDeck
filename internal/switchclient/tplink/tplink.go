@@ -141,6 +141,8 @@ func (t *TPLink) fetchPage(ctx context.Context, path string) (string, error) {
 }
 
 // postAction POSTs form data to a switch page and verifies a successful response.
+// The TL-SG108E closes the TCP connection after every POST (same RST behaviour as
+// login), so EOF / connection-reset is treated as success just like login.
 func (t *TPLink) postAction(ctx context.Context, path string, data map[string]string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+path, formBody(data))
 	if err != nil {
@@ -149,9 +151,9 @@ func (t *TPLink) postAction(ctx context.Context, path string, data map[string]st
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := t.http.Do(req)
 	if err != nil {
-		// Do NOT treat connection reset as success for configuration actions.
-		// If the switch drops the connection during a config write, the
-		// operation state is unknown and should be treated as an error.
+		if isConnectionReset(err.Error()) {
+			return nil
+		}
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
 	defer resp.Body.Close()
