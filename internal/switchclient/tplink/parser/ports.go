@@ -15,7 +15,7 @@ func speedCode(code int) (models.PortSpeed, models.DuplexMode, models.PortStatus
 	case 0:
 		return "", "", models.PortStatusDown
 	case 1:
-		return models.PortSpeed1G, models.DuplexFull, models.PortStatusDown // Auto but no link
+		return "", "", models.PortStatusDown // Auto configured, no link
 	case 2:
 		return models.PortSpeed10M, models.DuplexHalf, models.PortStatusUp
 	case 3:

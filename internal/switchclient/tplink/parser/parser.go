@@ -9,7 +9,6 @@ import (
 
 var (
 	reScript   = regexp.MustCompile(`(?s)<script[^>]*>(.*?)</script>`)
-	reHex      = regexp.MustCompile(`0[xX][0-9a-fA-F]+`)
 	reNewArray = regexp.MustCompile(`(?s)new Array\((.*?)\)`)
 )
 

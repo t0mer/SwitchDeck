@@ -44,8 +44,13 @@ func ParsePortMirror(js string) (*models.PortMirror, error) {
 			seen[i+1] = true
 		}
 	}
+	// Use length of ingress array as port count (or default 8)
+	portCount := len(info.Ingress)
+	if portCount == 0 {
+		portCount = 8
+	}
 	var src []int
-	for p := 1; p <= 8; p++ {
+	for p := 1; p <= portCount; p++ {
 		if seen[p] {
 			src = append(src, p)
 		}
