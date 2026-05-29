@@ -27,7 +27,8 @@ func New(insecure bool) *TPLink {
 
 // Login authenticates to the switch. The TL-SG108E closes the TCP connection
 // without sending an HTTP response after receiving valid credentials (TCP RST).
-// This is treated as a success signal.
+// This is treated as a success signal, but session validity is confirmed with a
+// subsequent probe GET to distinguish a real login from a general TCP failure.
 func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) error {
 	t.baseURL = strings.TrimRight(rawURL, "/")
 
@@ -38,6 +39,11 @@ func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) e
 	if err != nil {
 		if isConnectionReset(err.Error()) {
 			time.Sleep(500 * time.Millisecond)
+			// Validate the session by fetching a known data page.
+			// If credentials were wrong, the switch returns the login form instead.
+			if err := t.validateSession(ctx); err != nil {
+				return fmt.Errorf("login succeeded (TCP RST) but session validation failed: %w", err)
+			}
 			return nil
 		}
 		return fmt.Errorf("login POST: %w", err)
@@ -60,15 +66,45 @@ func (t *TPLink) Logout(ctx context.Context) error {
 }
 
 // isConnectionReset returns true for errors that indicate the server closed the
-// connection without a response (TCP RST — the TL-SG108E's auth confirmation signal).
+// connection without a response — the TL-SG108E's authentication confirmation signal.
+// Deliberately narrow: we do not want to treat general I/O errors as success.
 func isConnectionReset(msg string) bool {
-	for _, s := range []string{"EOF", "connection reset", "broken pipe",
-		"empty response", "use of closed", "forcibly closed"} {
+	for _, s := range []string{
+		"connection reset by peer",
+		"connection reset",
+		"broken pipe",
+		"use of closed network connection",
+		"forcibly closed",
+	} {
 		if strings.Contains(msg, s) {
 			return true
 		}
 	}
 	return false
+}
+
+// validateSession confirms the session is authenticated by fetching SystemInfoRpm.htm
+// and checking that it returns switch data rather than the login form.
+func (t *TPLink) validateSession(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/SystemInfoRpm.htm", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("session probe: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read session probe: %w", err)
+	}
+	// The login page always contains action="/logon.cgi"
+	// An authenticated page contains "var info_ds"
+	if strings.Contains(string(body), `action="/logon.cgi"`) {
+		return fmt.Errorf("authentication failed: credentials rejected")
+	}
+	return nil
 }
 
 // fetchPage GETs a switch page and returns the first script block JS content.
@@ -93,7 +129,7 @@ func (t *TPLink) fetchPage(ctx context.Context, path string) (string, error) {
 	return js, nil
 }
 
-// postAction POSTs form data to a switch page and discards the response.
+// postAction POSTs form data to a switch page and verifies a successful response.
 func (t *TPLink) postAction(ctx context.Context, path string, data map[string]string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+path, formBody(data))
 	if err != nil {
@@ -102,12 +138,34 @@ func (t *TPLink) postAction(ctx context.Context, path string, data map[string]st
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := t.http.Do(req)
 	if err != nil {
-		if isConnectionReset(err.Error()) {
-			return nil
-		}
+		// Do NOT treat connection reset as success for configuration actions.
+		// If the switch drops the connection during a config write, the
+		// operation state is unknown and should be treated as an error.
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("POST %s: unexpected status %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// postReboot POSTs a reboot command and accepts a TCP RST as confirmation.
+// The switch closes the connection immediately after initiating reboot.
+func (t *TPLink) postReboot(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		t.baseURL+"/SystemRebootRpm.htm", formBody(map[string]string{"reboot": "reboot"}))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, err = t.http.Do(req)
+	if err != nil {
+		if isConnectionReset(err.Error()) {
+			return nil // expected: switch reboots immediately
+		}
+		return fmt.Errorf("reboot POST: %w", err)
+	}
 	return nil
 }
