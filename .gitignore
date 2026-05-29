@@ -1,0 +1,43 @@
+# Claude / AI assistant context — local only, never track
+CLAUDE.md
+.claude/
+.cursor/
+.aider*
+
+# Design / implementation / planning docs — local only
+docs/*
+
+# Build output
+/dist/
+/bin/
+/build/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+profile.cov
+go.work
+go.work.sum
+vendor/
+
+# Local dev config / data
+.env
+.env.*
+!.env.example
+/data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
