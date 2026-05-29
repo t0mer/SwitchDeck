@@ -1,0 +1,12 @@
+# SwitchDeck example configuration
+# Copy to configs/config.yaml and adjust. Never commit real credentials.
+
+server:
+  port: 8080
+  log_level: info
+
+data:
+  dir: /data/switchdeck
+
+# Switches are managed through the UI and stored in SQLite.
+# This file is for documentation only.
