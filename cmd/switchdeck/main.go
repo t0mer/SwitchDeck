@@ -11,6 +11,8 @@ import (
 	"github.com/t0mer/SwitchDeck/internal/manager"
 	"github.com/t0mer/SwitchDeck/internal/server"
 	"github.com/t0mer/SwitchDeck/internal/store"
+	"github.com/t0mer/SwitchDeck/internal/switchclient"
+	"github.com/t0mer/SwitchDeck/internal/switchclient/tplink"
 )
 
 var version = "dev"
@@ -37,7 +39,10 @@ func main() {
 	}
 	defer st.Close()
 
-	mgr := manager.New(nil, st)
+	clientFactory := func(insecure bool) switchclient.Client {
+		return tplink.New(insecure)
+	}
+	mgr := manager.New(clientFactory)
 	srv := server.New(cfg, mgr)
 
 	log.Printf("SwitchDeck %s listening on :%d", version, cfg.Port)
