@@ -70,6 +70,7 @@ func (t *TPLink) Logout(ctx context.Context) error {
 // Deliberately narrow: we do not want to treat general I/O errors as success.
 func isConnectionReset(msg string) bool {
 	for _, s := range []string{
+		"EOF",
 		"connection reset by peer",
 		"connection reset",
 		"broken pipe",
