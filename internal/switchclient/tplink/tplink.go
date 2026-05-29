@@ -33,9 +33,11 @@ func New(insecure bool) *TPLink {
 func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) error {
 	t.baseURL = strings.TrimRight(rawURL, "/")
 
+	// The switch silently ignores POST requests that lack the submit button field.
 	_, err := t.http.PostForm(t.baseURL+"/logon.cgi", map[string]string{
 		"username": username,
 		"password": password,
+		"logon":    "Login",
 	})
 	if err != nil {
 		if isConnectionReset(err.Error()) {
