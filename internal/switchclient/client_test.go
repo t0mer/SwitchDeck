@@ -1,8 +1,12 @@
-package switchclient
+package switchclient_test
 
-import "testing"
+import (
+	"testing"
 
-func TestClientInterfaceExists(t *testing.T) {
-	// This test ensures the Client interface is defined.
-	// Concrete implementations will satisfy this interface.
+	"github.com/t0mer/SwitchDeck/internal/switchclient"
+	"github.com/t0mer/SwitchDeck/internal/switchclient/tplink"
+)
+
+func TestClientInterface(t *testing.T) {
+	var _ switchclient.Client = tplink.New(true)
 }
