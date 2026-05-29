@@ -11,6 +11,10 @@ docs/*
 /dist/
 /bin/
 /build/
+# Exception: preserve build/package for packaging
+!/build/
+!/build/package/
+!/build/package/.gitkeep
 
 # Go
 *.exe
