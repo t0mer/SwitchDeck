@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -8,8 +9,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/t0mer/SwitchDeck/internal/api/handlers"
+	mw "github.com/t0mer/SwitchDeck/internal/api/middleware"
 	"github.com/t0mer/SwitchDeck/internal/config"
-	"github.com/t0mer/SwitchDeck/internal/manager"
+	"github.com/t0mer/SwitchDeck/internal/store"
 )
 
 // Server is the HTTP server for SwitchDeck.
@@ -18,17 +20,54 @@ type Server struct {
 	router *chi.Mux
 }
 
-// New creates a Server wired up with routes.
-func New(cfg *config.Config, mgr *manager.Manager) *Server {
-	h := handlers.New(mgr)
+// New creates a Server with all routes wired up.
+func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	authProvider := func() (bool, string) {
+		ctx := context.Background()
+		enabled, _ := st.GetSetting(ctx, "auth_enabled")
+		token, _ := st.GetSetting(ctx, "auth_token")
+		return enabled == "true", token
+	}
+
 	r.Get("/health", h.HealthCheck)
+
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(mw.Auth(authProvider))
+
+		// Switch inventory
 		r.Get("/switches", h.ListSwitches)
+		r.Post("/switches", h.AddSwitch)
 		r.Get("/switches/{id}", h.GetSwitch)
+		r.Put("/switches/{id}", h.UpdateSwitch)
+		r.Delete("/switches/{id}", h.DeleteSwitch)
+		r.Post("/switches/{id}/collect", h.TriggerCollect)
+
+		// Switch data (read)
+		r.Get("/switches/{id}/snapshot", h.GetSnapshot)
+		r.Get("/switches/{id}/ports", h.GetPorts)
+		r.Get("/switches/{id}/stats", h.GetStats)
+		r.Get("/switches/{id}/vlans", h.GetVLANs)
+		r.Get("/switches/{id}/lag", h.GetLAG)
+
+		// Switch actions (write)
+		r.Patch("/switches/{id}/ports/{port}", h.PatchPort)
+		r.Post("/switches/{id}/stats/reset", h.ResetStats)
+		r.Patch("/switches/{id}/vlans", h.PatchVLANs)
+		r.Patch("/switches/{id}/mirror", h.PatchMirror)
+		r.Patch("/switches/{id}/qos", h.PatchQoS)
+		r.Patch("/switches/{id}/storm-control", h.PatchStormControl)
+		r.Patch("/switches/{id}/loop-prevention", h.PatchLoopPrevention)
+		r.Patch("/switches/{id}/igmp", h.PatchIGMP)
+		r.Patch("/switches/{id}/lag", h.PatchLAG)
+		r.Post("/switches/{id}/reboot", h.Reboot)
+
+		// Settings
+		r.Get("/settings", h.GetSettings)
+		r.Put("/settings", h.UpdateSettings)
 	})
 
 	return &Server{cfg: cfg, router: r}

@@ -3,21 +3,21 @@ package tplink
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 
-	"github.com/t0mer/SwitchDeck/internal/models"
 	"github.com/t0mer/SwitchDeck/pkg/httpclient"
 )
 
-// TPLink is the TP-Link implementation of switchclient.Client.
+// TPLink implements switchclient.Client for TP-Link TL-SG series switches.
 type TPLink struct {
 	baseURL string
 	http    *httpclient.Client
 }
 
-// ErrNotImplemented is returned by stub methods pending data collection.
-var ErrNotImplemented = fmt.Errorf("not yet implemented")
-
-// New creates a TPLink client. Set insecure=true only when the switch uses a
+// New creates a TPLink client. Set insecure=true when the switch uses a
 // self-signed cert and the operator accepts the MITM risk on their LAN.
 func New(insecure bool) *TPLink {
 	return &TPLink{
@@ -25,43 +25,147 @@ func New(insecure bool) *TPLink {
 	}
 }
 
-func (t *TPLink) Login(ctx context.Context, url, username, password string) error {
-	t.baseURL = url
-	return ErrNotImplemented
+// Login authenticates to the switch. The TL-SG108E closes the TCP connection
+// without sending an HTTP response after receiving valid credentials (TCP RST).
+// This is treated as a success signal, but session validity is confirmed with a
+// subsequent probe GET to distinguish a real login from a general TCP failure.
+func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) error {
+	t.baseURL = strings.TrimRight(rawURL, "/")
+
+	_, err := t.http.PostForm(t.baseURL+"/logon.cgi", map[string]string{
+		"username": username,
+		"password": password,
+	})
+	if err != nil {
+		if isConnectionReset(err.Error()) {
+			time.Sleep(500 * time.Millisecond)
+			// Validate the session by fetching a known data page.
+			// If credentials were wrong, the switch returns the login form instead.
+			if err := t.validateSession(ctx); err != nil {
+				return fmt.Errorf("login succeeded (TCP RST) but session validation failed: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("login POST: %w", err)
+	}
+	return nil
 }
 
+// Logout terminates the switch session.
 func (t *TPLink) Logout(ctx context.Context) error {
-	return ErrNotImplemented
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/Logout.htm", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("logout: %w", err)
+	}
+	resp.Body.Close()
+	return nil
 }
 
-func (t *TPLink) GetSnapshot(ctx context.Context) (*models.SwitchSnapshot, error) {
-	return nil, ErrNotImplemented
+// isConnectionReset returns true for errors that indicate the server closed the
+// connection without a response — the TL-SG108E's authentication confirmation signal.
+// Deliberately narrow: we do not want to treat general I/O errors as success.
+func isConnectionReset(msg string) bool {
+	for _, s := range []string{
+		"connection reset by peer",
+		"connection reset",
+		"broken pipe",
+		"use of closed network connection",
+		"forcibly closed",
+	} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
-func (t *TPLink) GetSystemInfo(ctx context.Context) (*models.Switch, error) {
-	return nil, ErrNotImplemented
+// validateSession confirms the session is authenticated by fetching SystemInfoRpm.htm
+// and checking that it returns switch data rather than the login form.
+func (t *TPLink) validateSession(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/SystemInfoRpm.htm", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("session probe: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read session probe: %w", err)
+	}
+	// The login page always contains action="/logon.cgi"
+	// An authenticated page contains "var info_ds"
+	if strings.Contains(string(body), `action="/logon.cgi"`) {
+		return fmt.Errorf("authentication failed: credentials rejected")
+	}
+	return nil
 }
 
-func (t *TPLink) GetPorts(ctx context.Context) ([]models.Port, error) {
-	return nil, ErrNotImplemented
+// fetchPage GETs a switch page and returns the first script block JS content.
+func (t *TPLink) fetchPage(ctx context.Context, path string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+path, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("GET %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	js := extractFirstScript(string(body))
+	if js == "" {
+		return "", fmt.Errorf("no script block in %s", path)
+	}
+	return js, nil
 }
 
-func (t *TPLink) GetPortStats(ctx context.Context) ([]models.PortStats, error) {
-	return nil, ErrNotImplemented
+// postAction POSTs form data to a switch page and verifies a successful response.
+func (t *TPLink) postAction(ctx context.Context, path string, data map[string]string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+path, formBody(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := t.http.Do(req)
+	if err != nil {
+		// Do NOT treat connection reset as success for configuration actions.
+		// If the switch drops the connection during a config write, the
+		// operation state is unknown and should be treated as an error.
+		return fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("POST %s: unexpected status %d", path, resp.StatusCode)
+	}
+	return nil
 }
 
-func (t *TPLink) GetVLANs(ctx context.Context) ([]models.VLAN, error) {
-	return nil, ErrNotImplemented
-}
-
-func (t *TPLink) GetPoE(ctx context.Context) (*models.PoEStatus, error) {
-	return nil, ErrNotImplemented
-}
-
-func (t *TPLink) GetMACTable(ctx context.Context) ([]models.MACEntry, error) {
-	return nil, ErrNotImplemented
-}
-
-func (t *TPLink) GetLLDP(ctx context.Context) ([]models.LLDPNeighbor, error) {
-	return nil, ErrNotImplemented
+// postReboot POSTs a reboot command and accepts a TCP RST as confirmation.
+// The switch closes the connection immediately after initiating reboot.
+func (t *TPLink) postReboot(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		t.baseURL+"/SystemRebootRpm.htm", formBody(map[string]string{"reboot": "reboot"}))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, err = t.http.Do(req)
+	if err != nil {
+		if isConnectionReset(err.Error()) {
+			return nil // expected: switch reboots immediately
+		}
+		return fmt.Errorf("reboot POST: %w", err)
+	}
+	return nil
 }

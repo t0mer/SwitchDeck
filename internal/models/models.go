@@ -149,16 +149,119 @@ type LLDPNeighbor struct {
 	Description string
 }
 
+// MirrorMode specifies which traffic direction is mirrored.
+type MirrorMode string
+
+const (
+	MirrorBoth    MirrorMode = "both"
+	MirrorIngress MirrorMode = "ingress"
+	MirrorEgress  MirrorMode = "egress"
+)
+
+// PortMirror holds port mirroring configuration.
+type PortMirror struct {
+	Enabled     bool
+	DestPort    int
+	Mode        MirrorMode
+	SourcePorts []int
+}
+
+// IGMPGroup is one multicast group entry from IGMP snooping.
+type IGMPGroup struct {
+	IP    string
+	VLAN  int
+	Ports []int
+}
+
+// IGMPStatus holds global IGMP snooping state.
+type IGMPStatus struct {
+	Enabled     bool
+	Suppression bool
+	Groups      []IGMPGroup
+}
+
+// QoSMode selects the QoS priority mode.
+type QoSMode string
+
+const (
+	QoSModePort  QoSMode = "port"
+	QoSMode8021p QoSMode = "802.1p"
+	QoSModeDSCP  QoSMode = "dscp"
+)
+
+// PortQoS is the per-port priority assignment.
+type PortQoS struct {
+	PortNumber int
+	Priority   int // 1=Lowest 2=Normal 3=Medium 4=Highest
+}
+
+// QoSStatus holds global QoS mode and per-port priorities.
+type QoSStatus struct {
+	Mode  QoSMode
+	Ports []PortQoS
+}
+
+// BandwidthControl is per-port ingress/egress rate limiting.
+type BandwidthControl struct {
+	PortNumber      int
+	IngressEnabled  bool
+	IngressRateKbps int // 0 = unlimited
+	EgressRateKbps  int // 0 = unlimited
+}
+
+// StormControl is per-port storm protection thresholds.
+type StormControl struct {
+	PortNumber         int
+	BroadcastKbps      int // 0 = disabled
+	MulticastKbps      int
+	UnknownUnicastKbps int
+}
+
+// PortConfig carries the writable fields of a port for SetPort actions.
+type PortConfig struct {
+	Enabled     bool
+	Speed       PortSpeed
+	FlowControl bool
+}
+
+// SwitchStatus is the runtime reachability state of a switch.
+type SwitchStatus string
+
+const (
+	SwitchStatusOnline  SwitchStatus = "online"
+	SwitchStatusOffline SwitchStatus = "offline"
+	SwitchStatusUnknown SwitchStatus = "unknown"
+)
+
+// SwitchConfig is the persistent inventory record stored in SQLite.
+type SwitchConfig struct {
+	ID             string
+	Name           string
+	IP             string
+	Username       string
+	Password       string // plaintext in memory only — encrypted at rest
+	InsecureTLS    bool
+	Enabled        bool
+	PollStatsSecs  int
+	PollConfigSecs int
+}
+
 // SwitchSnapshot is the full collected state of one switch at a point in time.
 type SwitchSnapshot struct {
-	Switch        Switch
-	Ports         []Port
-	PortStats     []PortStats
-	VLANs         []VLAN
-	PoE           *PoEStatus
-	LAGs          []LAGGroup
-	STP           *STPStatus
-	MACTable      []MACEntry
-	LLDPNeighbors []LLDPNeighbor
-	CollectedAt   time.Time
+	Switch         Switch
+	Ports          []Port
+	PortStats      []PortStats
+	VLANs          []VLAN
+	PoE            *PoEStatus
+	LAGs           []LAGGroup
+	STP            *STPStatus
+	MACTable       []MACEntry
+	LLDPNeighbors  []LLDPNeighbor
+	Mirror         *PortMirror
+	IGMP           *IGMPStatus
+	QoS            *QoSStatus
+	Bandwidth      []BandwidthControl
+	StormControl   []StormControl
+	LoopPrevention bool
+	CollectedAt    time.Time
 }
