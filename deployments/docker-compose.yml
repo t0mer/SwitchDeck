@@ -1,8 +1,8 @@
 services:
   switchdeck:
     image: techblog/switchdeck:latest
-    ports:
-      - "8080:8080"
+    # With network_mode: host, the service listens directly on the host port (8080)
+    # Explicit ports mapping is ignored with network_mode: host
     volumes:
       - switchdeck-data:/data/switchdeck
     environment:
