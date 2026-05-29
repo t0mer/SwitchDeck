@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 
 	flag "github.com/spf13/pflag"
 
+	"github.com/t0mer/SwitchDeck/internal/api/handlers"
 	"github.com/t0mer/SwitchDeck/internal/config"
 	"github.com/t0mer/SwitchDeck/internal/manager"
+	"github.com/t0mer/SwitchDeck/internal/models"
 	"github.com/t0mer/SwitchDeck/internal/server"
 	"github.com/t0mer/SwitchDeck/internal/store"
+	"github.com/t0mer/SwitchDeck/internal/switchclient"
+	"github.com/t0mer/SwitchDeck/internal/switchclient/tplink"
 )
 
 var version = "dev"
@@ -31,17 +36,39 @@ func main() {
 
 	cfg.DBPath = cfg.DataDir + "/switchdeck.db"
 
-	st, err := store.NewSQLiteStore(cfg.DBPath)
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
+		log.Fatalf("create data dir: %v", err)
+	}
+
+	st, err := store.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("failed to open store: %v", err)
+		log.Fatalf("open store: %v", err)
 	}
 	defer st.Close()
 
-	mgr := manager.New(nil, st)
-	srv := server.New(cfg, mgr)
+	encKey, err := st.EncryptionKey()
+	if err != nil {
+		log.Fatalf("encryption key: %v", err)
+	}
+
+	clientFactory := func(insecure bool) switchclient.Client {
+		return tplink.New(insecure)
+	}
+
+	mgr := manager.New(clientFactory)
+	mgr.SetSnapshotHandler(func(snap *models.SwitchSnapshot, _ bool) {
+		st.UpsertSnapshot(context.Background(), snap)
+	})
+
+	if err := mgr.LoadFromStore(context.Background(), st, encKey); err != nil {
+		log.Fatalf("load switches: %v", err)
+	}
+
+	h := handlers.New(mgr, st, encKey)
+	srv := server.New(cfg, h, st)
 
 	log.Printf("SwitchDeck %s listening on :%d", version, cfg.Port)
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("server error: %v", err)
+		log.Fatalf("server: %v", err)
 	}
 }

@@ -1,0 +1,22 @@
+{
+  "_comment": "Sanitized fixture from TL-SG108E. pkts layout: [TXGood,TXBad,RXGood,RXBad] per port.",
+  "endpoint": "/PortStatisticsRpm.htm",
+  "js_vars": {
+    "max_port_num": 8,
+    "all_info": {
+      "state":       [1,1,1,1,1,1,1,1,0,0],
+      "link_status": [6,5,0,0,6,5,0,5,0,0],
+      "pkts": [
+        1000000, 0,  500000, 100,
+        2000000, 0, 1000000, 200,
+              0, 0,       0,   0,
+          50000, 0,   25000,   5,
+        3000000, 0, 2000000, 300,
+        2500000, 0, 1500000, 250,
+              0, 0,       0,   0,
+          75000, 0,   40000,  10,
+              0, 0
+      ]
+    }
+  }
+}

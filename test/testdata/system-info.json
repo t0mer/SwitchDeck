@@ -1,0 +1,14 @@
+{
+  "_comment": "Sanitized fixture from TL-SG108E firmware. Real IPs/MACs replaced.",
+  "endpoint": "/SystemInfoRpm.htm",
+  "js_var": "info_ds",
+  "data": {
+    "descriStr": ["TestSwitch"],
+    "macStr": ["AA:BB:CC:DD:EE:01"],
+    "ipStr": ["192.168.1.10"],
+    "netmaskStr": ["255.255.255.0"],
+    "gatewayStr": ["192.168.1.1"],
+    "firmwareStr": ["1.0.0 Build 20201208 Rel.40304"],
+    "hardwareStr": ["TL-SG108E 6.0"]
+  }
+}

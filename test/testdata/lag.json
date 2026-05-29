@@ -1,0 +1,13 @@
+{
+  "_comment": "Sanitized fixture: 2 LAG groups. portStr_g1/g2 are 32-element arrays; non-zero = member.",
+  "endpoint": "/PortTrunkRpm.htm",
+  "js_vars": {
+    "trunk_conf": {
+      "maxTrunkNum": 2,
+      "portNum":     8,
+      "portStr_g1":  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "portStr_g2":  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    }
+  },
+  "_notes": "portStr_g1[0]=1,portStr_g1[1]=1 means ports 1+2 in LAG1. portStr_g2[4]=1,portStr_g2[5]=1 means ports 5+6 in LAG2. No LACP; static trunking only."
+}

@@ -1,5 +1,6 @@
 # Claude / AI assistant context — local only, never track
 CLAUDE.md
+.superpowers/
 .claude/
 .cursor/
 .aider*
