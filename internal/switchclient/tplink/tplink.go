@@ -151,6 +151,9 @@ func (t *TPLink) postAction(ctx context.Context, path string, data map[string]st
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := t.http.Do(req)
 	if err != nil {
+		// The TL-SG108E RSTs the connection after every POST, including config
+		// writes. There is no HTTP response to confirm the change was applied —
+		// RST-as-success is the only signal this firmware provides for any POST.
 		if isConnectionReset(err.Error()) {
 			return nil
 		}

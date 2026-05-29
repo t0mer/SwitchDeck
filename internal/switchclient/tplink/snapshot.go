@@ -35,6 +35,13 @@ func (t *TPLink) GetSnapshot(ctx context.Context) (*models.SwitchSnapshot, error
 		{"stats", "/PortStatisticsRpm.htm", t.applyPortStats(snap)},
 	}
 
+	// The switch's embedded web server can handle ~6 rapid sequential requests
+	// before needing a recovery pause. Fetch in batches of 6 with a short
+	// inter-request sleep (500ms) and a longer inter-batch pause (2s).
+	const batchSize = 6
+	const interRequest = 500 * time.Millisecond
+	const interBatch = 2 * time.Second
+
 	for i, step := range steps {
 		if err := ctx.Err(); err != nil {
 			return snap, fmt.Errorf("context cancelled at step %s: %w", step.name, err)
@@ -45,12 +52,17 @@ func (t *TPLink) GetSnapshot(ctx context.Context) (*models.SwitchSnapshot, error
 		} else if err := step.fn(js); err != nil {
 			log.Printf("switchclient: parse step %s: %v", step.name, err)
 		}
-		if i < len(steps)-1 {
-			select {
-			case <-ctx.Done():
-				return snap, ctx.Err()
-			case <-time.After(2 * time.Second):
-			}
+		if i == len(steps)-1 {
+			break
+		}
+		delay := interRequest
+		if (i+1)%batchSize == 0 {
+			delay = interBatch
+		}
+		select {
+		case <-ctx.Done():
+			return snap, ctx.Err()
+		case <-time.After(delay):
 		}
 	}
 	return snap, nil
