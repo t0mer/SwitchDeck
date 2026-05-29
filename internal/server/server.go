@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,7 @@ import (
 	mw "github.com/t0mer/SwitchDeck/internal/api/middleware"
 	"github.com/t0mer/SwitchDeck/internal/config"
 	"github.com/t0mer/SwitchDeck/internal/store"
+	"github.com/t0mer/SwitchDeck/internal/webui"
 )
 
 // Server is the HTTP server for SwitchDeck.
@@ -32,6 +34,16 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		token, _ := st.GetSetting(ctx, "auth_token")
 		return enabled == "true", token
 	}
+
+	// Frontend UI routes
+	ui, err := webui.NewHandler()
+	if err != nil {
+		log.Fatalf("webui: %v", err)
+	}
+	r.Get("/", ui.Dashboard)
+	r.Get("/switches/{id}", ui.SwitchDetail)
+	r.Get("/settings", ui.Settings)
+	r.Get("/static/*", ui.ServeStatic)
 
 	r.Get("/health", h.HealthCheck)
 
