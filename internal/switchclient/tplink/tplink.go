@@ -1,10 +1,12 @@
 package tplink
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -154,6 +156,37 @@ func (t *TPLink) postAction(ctx context.Context, path string, data map[string]st
 		// The TL-SG108E RSTs the connection after every POST, including config
 		// writes. There is no HTTP response to confirm the change was applied —
 		// RST-as-success is the only signal this firmware provides for any POST.
+		if isConnectionReset(err.Error()) {
+			return nil
+		}
+		return fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("POST %s: unexpected status %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// postMultipart POSTs multipart/form-data to a switch CGI endpoint.
+// Used for actions whose form uses enctype=multipart/form-data (e.g. port_setting.cgi).
+func (t *TPLink) postMultipart(ctx context.Context, path string, data map[string]string) error {
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	for k, v := range data {
+		if err := w.WriteField(k, v); err != nil {
+			return fmt.Errorf("build multipart field %s: %w", k, err)
+		}
+	}
+	w.Close()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+path, &body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	resp, err := t.http.Do(req)
+	if err != nil {
 		if isConnectionReset(err.Error()) {
 			return nil
 		}

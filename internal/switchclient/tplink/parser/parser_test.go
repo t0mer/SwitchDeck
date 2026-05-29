@@ -123,7 +123,7 @@ func TestParsePortSettings(t *testing.T) {
 var all_info = {
 state:[1,1,0,0,1,1,0,1,0,0],
 trunk_info:[0,0,0,0,0,0,0,0,0,0],
-spd_cfg:[1,1,1,1,1,1,1,1,0,0],
+spd_cfg:[6,5,1,1,6,5,1,5,0,0],
 spd_act:[6,5,0,0,6,5,0,5,0,0],
 fc_cfg:[0,0,0,0,0,0,0,0,0,0],
 fc_act:[0,0,0,0,0,0,0,0,0,0]
@@ -135,6 +135,7 @@ fc_act:[0,0,0,0,0,0,0,0,0,0]
 	if len(ports) != 8 {
 		t.Fatalf("expected 8 ports, got %d", len(ports))
 	}
+	// Port 1: enabled, configured 1000MF (spd_cfg=6), actual 1GFull
 	if !ports[0].Enabled {
 		t.Error("port 1 should be enabled")
 	}
@@ -144,8 +145,16 @@ fc_act:[0,0,0,0,0,0,0,0,0,0]
 	if ports[0].Duplex != models.DuplexFull {
 		t.Errorf("port 1 duplex: got %v, want full", ports[0].Duplex)
 	}
-	if ports[2].Status != models.PortStatusDown {
-		t.Errorf("port 3 status: got %v, want down", ports[2].Status)
+	if ports[0].Status != models.PortStatusUp {
+		t.Errorf("port 1 status: got %v, want up", ports[0].Status)
+	}
+	// Port 3: disabled (state=0) — status must be PortStatusDisabled, not PortStatusDown
+	if ports[2].Status != models.PortStatusDisabled {
+		t.Errorf("port 3 status: got %v, want disabled", ports[2].Status)
+	}
+	// Port 5: enabled, configured 1G, but spd_cfg=6 round-trips to 1G
+	if ports[4].Speed != models.PortSpeed1G {
+		t.Errorf("port 5 speed: got %v, want 1G", ports[4].Speed)
 	}
 }
 

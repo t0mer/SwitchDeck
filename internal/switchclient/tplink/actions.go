@@ -5,50 +5,30 @@ import (
 	"fmt"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
+	"github.com/t0mer/SwitchDeck/internal/switchclient/tplink/parser"
 )
 
-func speedConfigCode(s models.PortSpeed) string {
-	switch s {
-	case models.PortSpeed10M:
-		return "3"
-	case models.PortSpeed100M:
-		return "5"
-	case models.PortSpeed1G:
-		return "6"
-	default:
-		return "1" // Auto
-	}
-}
-
 // SetPort configures a single port's enable state, speed, and flow control.
-// The switch requires the full state for all 8 ports to be submitted.
+// The switch uses a CGI endpoint that accepts the target port number plus
+// single state/speed/flowcontrol values — not a full array of all ports.
 func (t *TPLink) SetPort(ctx context.Context, port int, cfg models.PortConfig) error {
 	if port < 1 || port > 8 {
 		return fmt.Errorf("invalid port number %d (must be 1-8)", port)
 	}
-	state := make([]string, 8)
-	speed := make([]string, 8)
-	fc := make([]string, 8)
-	for i := range state {
-		state[i] = "1"
-		speed[i] = "1"
-		fc[i] = "0"
-	}
-	idx := port - 1
+	state := "0"
 	if cfg.Enabled {
-		state[idx] = "1"
-	} else {
-		state[idx] = "0"
+		state = "1"
 	}
-	speed[idx] = speedConfigCode(cfg.Speed)
+	fc := "0"
 	if cfg.FlowControl {
-		fc[idx] = "1"
+		fc = "1"
 	}
-	return t.postAction(ctx, "/PortSettingRpm.htm", map[string]string{
-		"state":   joinStrings(state),
-		"spd_cfg": joinStrings(speed),
-		"fc_cfg":  joinStrings(fc),
-		"apply":   "apply",
+	return t.postMultipart(ctx, "/port_setting.cgi", map[string]string{
+		"portid":      fmt.Sprintf("%d", port),
+		"state":       state,
+		"speed":       parser.CfgSpeedCode(cfg.Speed),
+		"flowcontrol": fc,
+		"apply":       "Apply",
 	})
 }
 

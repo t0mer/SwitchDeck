@@ -8,14 +8,10 @@ import (
 	"github.com/t0mer/SwitchDeck/internal/models"
 )
 
-// speedCode maps the switch's numeric speed code to PortSpeed and DuplexMode.
-// 0=LinkDown, 1=Auto(cfg), 2=10MHalf, 3=10MFull, 4=100MHalf, 5=100MFull, 6=1000MFull
-func speedCode(code int) (models.PortSpeed, models.DuplexMode, models.PortStatus) {
+// actualSpeedCode maps spd_act to link status and negotiated duplex.
+// 0=no link, 1 unused in spd_act, 2=10MHalf, 3=10MFull, 4=100MHalf, 5=100MFull, 6=1000MFull
+func actualSpeedCode(code int) (models.PortSpeed, models.DuplexMode, models.PortStatus) {
 	switch code {
-	case 0:
-		return "", "", models.PortStatusDown
-	case 1:
-		return "", "", models.PortStatusDown // Auto configured, no link
 	case 2:
 		return models.PortSpeed10M, models.DuplexHalf, models.PortStatusUp
 	case 3:
@@ -28,6 +24,35 @@ func speedCode(code int) (models.PortSpeed, models.DuplexMode, models.PortStatus
 		return models.PortSpeed1G, models.DuplexFull, models.PortStatusUp
 	default:
 		return "", "", models.PortStatusDown
+	}
+}
+
+// configuredSpeed maps spd_cfg to the PortSpeed the operator chose.
+// 1=Auto (no fixed speed), 2/3=10M, 4/5=100M, 6=1000M.
+func configuredSpeed(code int) models.PortSpeed {
+	switch code {
+	case 2, 3:
+		return models.PortSpeed10M
+	case 4, 5:
+		return models.PortSpeed100M
+	case 6:
+		return models.PortSpeed1G
+	default:
+		return "" // Auto or unknown
+	}
+}
+
+// CfgSpeedCode converts a PortSpeed back to the switch's spd_cfg numeric code.
+func CfgSpeedCode(s models.PortSpeed) string {
+	switch s {
+	case models.PortSpeed10M:
+		return "3" // 10MFull
+	case models.PortSpeed100M:
+		return "5" // 100MFull
+	case models.PortSpeed1G:
+		return "6" // 1000MFull
+	default:
+		return "1" // Auto
 	}
 }
 
@@ -63,11 +88,20 @@ func ParsePortSettings(js string) ([]models.Port, error) {
 		if i < len(data.FcCfg) {
 			p.FlowControl = data.FcCfg[i] == 1
 		}
+		// Speed is the operator-configured value (spd_cfg), not the actual link speed.
+		// This ensures round-trip writes preserve the setting even when the port has no link.
+		if i < len(data.SpdCfg) {
+			p.Speed = configuredSpeed(data.SpdCfg[i])
+		}
+		// Status and duplex reflect actual link state (spd_act).
 		if i < len(data.SpdAct) {
-			spd, dpx, status := speedCode(data.SpdAct[i])
-			p.Speed = spd
+			_, dpx, status := actualSpeedCode(data.SpdAct[i])
 			p.Duplex = dpx
-			p.Status = status
+			if !p.Enabled {
+				p.Status = models.PortStatusDisabled
+			} else {
+				p.Status = status
+			}
 		}
 		ports[i] = p
 	}
