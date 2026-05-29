@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -38,7 +39,9 @@ func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) e
 	})
 	if err != nil {
 		if isConnectionReset(err.Error()) {
-			time.Sleep(500 * time.Millisecond)
+			// The TL-SG108E needs up to ~1 s to fully establish the session
+			// after the TCP RST before it will serve authenticated pages.
+			time.Sleep(1500 * time.Millisecond)
 			// Validate the session by fetching a known data page.
 			// If credentials were wrong, the switch returns the login form instead.
 			if err := t.validateSession(ctx); err != nil {
@@ -103,6 +106,11 @@ func (t *TPLink) validateSession(ctx context.Context) error {
 	// The login page always contains action="/logon.cgi"
 	// An authenticated page contains "var info_ds"
 	if strings.Contains(string(body), `action="/logon.cgi"`) {
+		preview := string(body)
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		log.Printf("tplink: session probe returned login form (body[0:200]: %q)", preview)
 		return fmt.Errorf("authentication failed: credentials rejected")
 	}
 	return nil
