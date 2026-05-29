@@ -226,6 +226,7 @@ func (t *TPLink) SetLoopPrevention(ctx context.Context, enabled bool) error {
 }
 
 // Reboot reboots the switch. The switch will be unreachable for ~30 seconds.
+// A connection reset after the reboot POST is expected and treated as success.
 func (t *TPLink) Reboot(ctx context.Context) error {
-	return t.postAction(ctx, "/SystemRebootRpm.htm", map[string]string{"reboot": "reboot"})
+	return t.postReboot(ctx)
 }

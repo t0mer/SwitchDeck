@@ -5,31 +5,70 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/t0mer/SwitchDeck/internal/switchclient/tplink"
 )
 
-func TestLoginHandlesTCPRST(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+// rstClose closes c with TCP RST (linger 0) so the peer sees "connection reset by peer"
+// rather than a clean FIN that produces EOF.
+func rstClose(c net.Conn) {
+	if tc, ok := c.(*net.TCPConn); ok {
+		tc.SetLinger(0)
 	}
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
+	c.Close()
+}
+
+func TestLoginHandlesTCPRST(t *testing.T) {
+	// Simulate switch behavior: POST /logon.cgi → RST, GET /SystemInfoRpm.htm → data page
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "logon") {
+			// Hijack the connection and close it with RST (simulates the switch's behaviour)
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				http.Error(w, "no hijack", 500)
 				return
 			}
-			conn.Close()
+			conn, _, _ := hj.Hijack()
+			rstClose(conn)
+			return
 		}
-	}()
-	defer ln.Close()
+		// For the session validation GET, return a data page (not login form)
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<script>var info_ds = {descriStr:["TestSwitch"]};</script>`))
+	}))
+	defer srv.Close()
 
 	c := tplink.New(false)
-	err = c.Login(context.Background(), "http://"+ln.Addr().String(), "admin", "pass")
+	err := c.Login(context.Background(), srv.URL, "admin", "pass")
 	if err != nil {
-		t.Errorf("expected nil error for RST-like close, got: %v", err)
+		t.Errorf("expected nil error for RST + valid session, got: %v", err)
+	}
+}
+
+func TestLoginFailsWhenSessionInvalid(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "logon") {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				http.Error(w, "no hijack", 500)
+				return
+			}
+			conn, _, _ := hj.Hijack()
+			rstClose(conn)
+			return
+		}
+		// Return login page (session not established — wrong credentials)
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<form action="/logon.cgi"><input name="username"></form>`))
+	}))
+	defer srv.Close()
+
+	c := tplink.New(false)
+	err := c.Login(context.Background(), srv.URL, "admin", "wrongpassword")
+	if err == nil {
+		t.Error("expected error when session validation returns login page, got nil")
 	}
 }
 
