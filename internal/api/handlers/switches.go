@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -113,6 +115,18 @@ func (h *Handlers) AddSwitch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "stored but could not start worker: "+err.Error())
 		return
 	}
+	// Kick off an immediate collection in the background so data populates
+	// without the user having to click "Collect Now".
+	go func() {
+		snap, err := h.Manager.CollectNow(context.Background(), cfg.ID)
+		if err != nil {
+			log.Printf("auto-collect[%s]: %v", cfg.ID, err)
+			return
+		}
+		if err := h.Store.UpsertSnapshot(context.Background(), snap); err != nil {
+			log.Printf("auto-collect[%s]: store: %v", cfg.ID, err)
+		}
+	}()
 	writeJSON(w, http.StatusCreated, cfgToResponse(cfg, models.SwitchStatusUnknown))
 }
 
