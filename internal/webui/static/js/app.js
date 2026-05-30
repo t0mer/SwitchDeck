@@ -377,7 +377,6 @@ async function loadSnapshot(id) {
     renderSystemTab(snap);
     renderPortsTab(snap, id);
     renderVLANsTab(snap);
-    renderPoETab(snap);
     await renderStatsTab(id);
   } catch {
     renderNoSnapshot();
