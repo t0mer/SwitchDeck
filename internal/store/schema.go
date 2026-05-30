@@ -25,4 +25,16 @@ CREATE TABLE IF NOT EXISTS settings (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS notification_channels (
+	id             TEXT PRIMARY KEY,
+	name           TEXT NOT NULL UNIQUE,
+	provider       TEXT NOT NULL,
+	config_enc     BLOB NOT NULL,
+	enabled        INTEGER NOT NULL DEFAULT 1,
+	notify_offline INTEGER NOT NULL DEFAULT 1,
+	notify_online  INTEGER NOT NULL DEFAULT 1,
+	created_at     INTEGER NOT NULL,
+	updated_at     INTEGER NOT NULL
+);
 `
