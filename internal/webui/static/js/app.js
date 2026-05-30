@@ -344,12 +344,15 @@ document.getElementById('switch-form')?.addEventListener('submit', async e => {
     if (editingSwitchId) {
       await apiPut(`/switches/${editingSwitchId}`, body);
       toast('Switch updated');
+      closeModal();
+      await loadSwitches();
     } else {
       await apiPost('/switches', body);
-      toast('Switch added');
+      toast('Switch added — collecting data…');
+      closeModal();
+      await loadSwitches();
+      scheduleCollectingPoll();
     }
-    closeModal();
-    await loadSwitches();
   } catch (err) {
     toast(err.message, 'danger');
   } finally {

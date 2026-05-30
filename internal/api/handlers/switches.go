@@ -115,8 +115,9 @@ func (h *Handlers) AddSwitch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "stored but could not start worker: "+err.Error())
 		return
 	}
-	// Kick off an immediate collection in the background so data populates
-	// without the user having to click "Collect Now".
+	// Mark as collecting before the goroutine runs so the status is visible
+	// immediately when the UI reloads the switch list after this response.
+	h.Manager.MarkCollecting(cfg.ID)
 	go func() {
 		snap, err := h.Manager.CollectNow(context.Background(), cfg.ID)
 		if err != nil {
@@ -127,7 +128,7 @@ func (h *Handlers) AddSwitch(w http.ResponseWriter, r *http.Request) {
 			log.Printf("auto-collect[%s]: store: %v", cfg.ID, err)
 		}
 	}()
-	writeJSON(w, http.StatusCreated, cfgToResponse(cfg, models.SwitchStatusUnknown))
+	writeJSON(w, http.StatusCreated, cfgToResponse(cfg, models.SwitchStatusCollecting))
 }
 
 // GetSwitch handles GET /api/v1/switches/{id}.
