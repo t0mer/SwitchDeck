@@ -5,19 +5,21 @@ import (
 	"net/http"
 
 	"github.com/t0mer/SwitchDeck/internal/manager"
+	"github.com/t0mer/SwitchDeck/internal/notification"
 	"github.com/t0mer/SwitchDeck/internal/store"
 )
 
 // Handlers holds shared dependencies for all HTTP handlers.
 type Handlers struct {
-	Manager *manager.Manager
-	Store   store.Store
-	EncKey  []byte
+	Manager    *manager.Manager
+	Store      store.Store
+	EncKey     []byte
+	NotifStore *notification.Store
 }
 
 // New creates a Handlers instance.
-func New(mgr *manager.Manager, st store.Store, encKey []byte) *Handlers {
-	return &Handlers{Manager: mgr, Store: st, EncKey: encKey}
+func New(mgr *manager.Manager, st store.Store, encKey []byte, ns *notification.Store) *Handlers {
+	return &Handlers{Manager: mgr, Store: st, EncKey: encKey, NotifStore: ns}
 }
 
 // HealthCheck handles GET /health.
