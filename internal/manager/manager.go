@@ -14,6 +14,11 @@ import (
 // ClientFactory creates a switch client. insecure controls TLS verification.
 type ClientFactory func(insecure bool) switchclient.Client
 
+// NotificationService is called when a switch transitions between online and offline.
+type NotificationService interface {
+	NotifyPingChange(switchID, name, ip string, online bool)
+}
+
 // Manager orchestrates the collection pool across all registered switches.
 type Manager struct {
 	factory    ClientFactory
@@ -22,6 +27,7 @@ type Manager struct {
 	collecting sync.Map // string → struct{}: switches currently collecting
 	snapFunc   SnapshotFunc
 	errFunc    ErrorFunc
+	notifSvc   NotificationService
 }
 
 // New creates a Manager. factory is called when a switch is added.
@@ -33,6 +39,14 @@ func New(factory ClientFactory) *Manager {
 		errFunc:  func(string, error) {},
 	}
 	return m
+}
+
+// SetNotificationService registers the service that receives ping change events.
+// Must be called before LoadFromStore or Add.
+func (m *Manager) SetNotificationService(svc NotificationService) {
+	m.mu.Lock()
+	m.notifSvc = svc
+	m.mu.Unlock()
 }
 
 // SetSnapshotHandler registers a callback invoked after each successful collection.
@@ -75,6 +89,13 @@ func (m *Manager) Add(cfg models.SwitchConfig) error {
 	}
 	client := m.factory(cfg.InsecureTLS)
 	w := newWorker(cfg, client, m.snapFunc, m.errFunc)
+	if m.notifSvc != nil {
+		svc := m.notifSvc
+		cfg := cfg
+		w.pingChangeFn = func(id string, online bool) {
+			svc.NotifyPingChange(id, cfg.Name, cfg.IP, online)
+		}
+	}
 	m.workers[cfg.ID] = w
 	w.start()
 	return nil
