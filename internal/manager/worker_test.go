@@ -28,6 +28,7 @@ func (m *mockClient) RefreshStats(_ context.Context) ([]models.PortStats, error)
 	m.statsOnly.Add(1)
 	return nil, nil
 }
+func (m *mockClient) RefreshPorts(_ context.Context) ([]models.Port, error) { return nil, nil }
 func (m *mockClient) SetPort(_ context.Context, _ int, _ models.PortConfig) error { return nil }
 func (m *mockClient) ResetPortCounters(_ context.Context) error                    { return nil }
 func (m *mockClient) SetVLANs(_ context.Context, _ []models.VLAN) error            { return nil }

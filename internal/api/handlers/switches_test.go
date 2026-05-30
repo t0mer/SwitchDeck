@@ -25,6 +25,7 @@ func (n *noopClient) GetSnapshot(_ context.Context) (*models.SwitchSnapshot, err
 	return &models.SwitchSnapshot{}, nil
 }
 func (n *noopClient) RefreshStats(_ context.Context) ([]models.PortStats, error) { return nil, nil }
+func (n *noopClient) RefreshPorts(_ context.Context) ([]models.Port, error)      { return nil, nil }
 func (n *noopClient) SetPort(_ context.Context, _ int, _ models.PortConfig) error { return nil }
 func (n *noopClient) ResetPortCounters(_ context.Context) error                    { return nil }
 func (n *noopClient) SetVLANs(_ context.Context, _ []models.VLAN) error            { return nil }
