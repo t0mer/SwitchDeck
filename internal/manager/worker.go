@@ -10,6 +10,12 @@ import (
 	"github.com/t0mer/SwitchDeck/internal/switchclient"
 )
 
+const (
+	pingInterval  = 30 * time.Second
+	pingTimeout   = 3 * time.Second
+	pingThreshold = 2
+)
+
 // SnapshotFunc is called after each successful collection.
 // statsOnly is true when only port stats were refreshed.
 type SnapshotFunc func(snap *models.SwitchSnapshot, statsOnly bool)
@@ -27,6 +33,12 @@ type worker struct {
 	stopped chan struct{}
 	mu      sync.Mutex
 	last    *models.SwitchSnapshot
+
+	pingMu     sync.Mutex
+	pingConsec int    // consecutive failure count; reset to 0 on success
+	pingReady  bool   // true once at least one probe has completed
+	pingDown   bool   // true when pingConsec >= pingThreshold
+	pingPort   string // management TCP port to probe; normally "80"
 }
 
 // newWorker creates a worker. Call start() to begin collection.
@@ -36,8 +48,9 @@ func newWorker(cfg models.SwitchConfig, client switchclient.Client, onSnap Snaps
 		client:  client,
 		onSnap:  onSnap,
 		onErr:   onErr,
-		stop:    make(chan struct{}),
-		stopped: make(chan struct{}),
+		stop:     make(chan struct{}),
+		stopped:  make(chan struct{}),
+		pingPort: "80",
 	}
 }
 
@@ -57,6 +70,14 @@ func (w *worker) lastSnapshot() *models.SwitchSnapshot {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.last
+}
+
+// pingIsDown returns true when the switch has failed pingThreshold consecutive
+// probes. Returns false until the first probe completes (avoids premature offline).
+func (w *worker) pingIsDown() bool {
+	w.pingMu.Lock()
+	defer w.pingMu.Unlock()
+	return w.pingReady && w.pingDown
 }
 
 func (w *worker) run() {
