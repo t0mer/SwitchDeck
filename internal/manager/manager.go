@@ -112,6 +112,12 @@ func (m *Manager) GetClient(id string) (switchclient.Client, error) {
 	return w.client, nil
 }
 
+// MarkCollecting marks a switch as currently collecting so Status() reflects
+// it immediately — call this before launching a background CollectNow goroutine.
+func (m *Manager) MarkCollecting(id string) {
+	m.collecting.Store(id, struct{}{})
+}
+
 // CollectNow performs an immediate full collection for a switch using a fresh
 // authenticated client session independent of the background worker.
 // On success it updates the worker's cached last snapshot.
