@@ -37,7 +37,15 @@ func SetWorkerOffline(tw *TestWorker) {
 	tw.pingConsec = pingThreshold
 	tw.pingReady = true
 	tw.pingDown = true
+	tw.pingWasDown = true
 	tw.pingMu.Unlock()
+}
+
+// SetPingChangeFn sets the pingChangeFn on a worker for testing.
+func SetPingChangeFn(w *TestWorker, fn func(id string, online bool)) {
+	w.pingMu.Lock()
+	w.pingChangeFn = fn
+	w.pingMu.Unlock()
 }
 
 // DriveWorkerOffline forces the named worker's ping state to offline

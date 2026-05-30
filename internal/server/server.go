@@ -80,6 +80,13 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		// Settings
 		r.Get("/settings", h.GetSettings)
 		r.Put("/settings", h.UpdateSettings)
+
+		// Notifications
+		r.Get("/notifications", h.ListNotifications)
+		r.Post("/notifications", h.CreateNotification)
+		r.Post("/notifications/test", h.TestNotification)
+		r.Put("/notifications/{id}", h.UpdateNotification)
+		r.Delete("/notifications/{id}", h.DeleteNotification)
 	})
 
 	return &Server{cfg: cfg, router: r}
