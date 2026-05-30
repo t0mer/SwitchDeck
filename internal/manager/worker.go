@@ -3,11 +3,18 @@ package manager
 import (
 	"context"
 	"log"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
 	"github.com/t0mer/SwitchDeck/internal/switchclient"
+)
+
+const (
+	pingInterval  = 30 * time.Second
+	pingTimeout   = 3 * time.Second
+	pingThreshold = 2
 )
 
 // SnapshotFunc is called after each successful collection.
@@ -27,6 +34,12 @@ type worker struct {
 	stopped chan struct{}
 	mu      sync.Mutex
 	last    *models.SwitchSnapshot
+
+	pingMu     sync.Mutex
+	pingConsec int    // consecutive failure count; reset to 0 on success
+	pingReady  bool   // true once at least one probe has completed
+	pingDown   bool   // true when pingConsec >= pingThreshold
+	pingPort   string // management TCP port to probe; normally "80"
 }
 
 // newWorker creates a worker. Call start() to begin collection.
@@ -36,8 +49,9 @@ func newWorker(cfg models.SwitchConfig, client switchclient.Client, onSnap Snaps
 		client:  client,
 		onSnap:  onSnap,
 		onErr:   onErr,
-		stop:    make(chan struct{}),
-		stopped: make(chan struct{}),
+		stop:     make(chan struct{}),
+		stopped:  make(chan struct{}),
+		pingPort: "80",
 	}
 }
 
@@ -59,6 +73,36 @@ func (w *worker) lastSnapshot() *models.SwitchSnapshot {
 	return w.last
 }
 
+// pingIsDown returns true when the switch has failed pingThreshold consecutive
+// probes. Returns false until the first probe completes (avoids premature offline).
+func (w *worker) pingIsDown() bool {
+	w.pingMu.Lock()
+	defer w.pingMu.Unlock()
+	return w.pingReady && w.pingDown
+}
+
+// doPing performs a TCP-connect probe to the switch management port.
+// On success the consecutive-failure counter is reset; on failure it is
+// incremented and pingDown is set when it reaches pingThreshold.
+func (w *worker) doPing(ctx context.Context) {
+	addr := w.cfg.IP + ":" + w.pingPort
+	conn, err := (&net.Dialer{Timeout: pingTimeout}).DialContext(ctx, "tcp", addr)
+	w.pingMu.Lock()
+	defer w.pingMu.Unlock()
+	w.pingReady = true
+	if err != nil {
+		log.Printf("ping[%s]: %v", w.cfg.ID, err)
+		w.pingConsec++
+		if w.pingConsec >= pingThreshold {
+			w.pingDown = true
+		}
+		return
+	}
+	conn.Close()
+	w.pingConsec = 0
+	w.pingDown = false
+}
+
 func (w *worker) run() {
 	defer close(w.stopped)
 	ctx := context.Background()
@@ -74,10 +118,15 @@ func (w *worker) run() {
 	statsDur := time.Duration(w.cfg.PollStatsSecs) * time.Second
 	configDur := time.Duration(w.cfg.PollConfigSecs) * time.Second
 
-	statsTicker := time.NewTicker(statsDur)
+	statsTicker  := time.NewTicker(statsDur)
 	configTicker := time.NewTicker(configDur)
+	pingTicker   := time.NewTicker(pingInterval)
 	defer statsTicker.Stop()
 	defer configTicker.Stop()
+	defer pingTicker.Stop()
+
+	// First probe fires immediately so status is known within seconds of startup.
+	go w.doPing(ctx)
 
 	for {
 		select {
@@ -87,6 +136,8 @@ func (w *worker) run() {
 			w.collectFull(ctx)
 		case <-statsTicker.C:
 			w.collectStats(ctx)
+		case <-pingTicker.C:
+			go w.doPing(ctx)
 		}
 	}
 }

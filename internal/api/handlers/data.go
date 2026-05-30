@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -114,7 +115,19 @@ func (h *Handlers) PatchPort(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Re-read port settings from the switch to confirm the change landed and
+	// return the updated list so the UI can refresh without a full collect.
+	ports, err := h.Manager.RefreshPorts(r.Context(), id)
+	if err != nil {
+		log.Printf("refresh ports after set[%s/port%d]: %v", id, portNum, err)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+	if snap, snapErr := h.Store.LatestSnapshot(r.Context(), id); snapErr == nil {
+		snap.Ports = ports
+		h.Store.UpsertSnapshot(r.Context(), snap)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok", "ports": ports})
 }
 
 // ResetStats handles POST /api/v1/switches/{id}/stats/reset.

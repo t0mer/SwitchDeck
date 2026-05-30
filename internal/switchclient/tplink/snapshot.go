@@ -78,6 +78,15 @@ func (t *TPLink) RefreshStats(ctx context.Context) ([]models.PortStats, error) {
 	return parser.ParsePortStats(js)
 }
 
+// RefreshPorts fetches only /PortSettingRpm.htm to confirm a write landed.
+func (t *TPLink) RefreshPorts(ctx context.Context) ([]models.Port, error) {
+	js, err := t.fetchPage(ctx, "/PortSettingRpm.htm")
+	if err != nil {
+		return nil, fmt.Errorf("refresh ports: %w", err)
+	}
+	return parser.ParsePortSettings(js)
+}
+
 func (t *TPLink) applySystemInfo(snap *models.SwitchSnapshot) func(string) error {
 	return func(js string) error {
 		sw, err := parser.ParseSystemInfo(js)
