@@ -40,16 +40,32 @@ function setText(id, text) {
   if (e) e.textContent = text ?? '';
 }
 
-/** Build a status badge element. */
-function statusBadgeEl(status) {
+// Approximate collection duration in seconds (matches backend batch constants).
+const COLLECT_SECS = 6;
+
+/** Build a status badge element. collectingSince is a Unix timestamp (seconds). */
+function statusBadgeEl(status, collectingSince) {
   const map = {
-    online:  ['badge-success', 'Online'],
-    offline: ['badge-danger',  'Offline'],
-    unknown: ['badge-neutral', 'Unknown'],
-    error:   ['badge-danger',  'Error'],
+    online:     ['badge-success', 'Online'],
+    offline:    ['badge-danger',  'Offline'],
+    unknown:    ['badge-neutral', 'Unknown'],
+    error:      ['badge-danger',  'Error'],
   };
+  if (status === 'collecting') {
+    const badge = el('span', 'badge badge-collecting');
+    if (collectingSince) badge.dataset.since = collectingSince;
+    badge.textContent = collectingLabel(collectingSince);
+    return badge;
+  }
   const [cls, label] = map[status] || map.unknown;
   return el('span', `badge ${cls}`, label);
+}
+
+function collectingLabel(since) {
+  if (!since) return 'Collecting…';
+  const elapsed = Math.floor(Date.now() / 1000) - since;
+  const remaining = Math.max(0, COLLECT_SECS - elapsed);
+  return remaining > 0 ? `Collecting ~${remaining}s` : 'Finalizing…';
 }
 
 /** Build a port status dot + text span. */
@@ -123,8 +139,40 @@ function formatDuration(ns) {
 const switchesGrid = document.getElementById('switches-grid');
 if (switchesGrid) initDashboard();
 
+let _pollTimer = null;
+let _tickTimer = null;
+
+function startCountdownTick() {
+  clearInterval(_tickTimer);
+  _tickTimer = setInterval(() => {
+    document.querySelectorAll('.badge-collecting[data-since]').forEach(badge => {
+      badge.textContent = collectingLabel(parseInt(badge.dataset.since));
+    });
+  }, 1000);
+}
+
+function stopCountdownTick() {
+  clearInterval(_tickTimer);
+  _tickTimer = null;
+}
+
 async function initDashboard() {
   await loadSwitches();
+}
+
+function scheduleCollectingPoll() {
+  clearTimeout(_pollTimer);
+  _pollTimer = setTimeout(async () => {
+    const switches = await apiGet('/switches').catch(() => null);
+    if (!switches) return;
+    const anyCollecting = switches.some(s => s.status === 'collecting');
+    renderSwitchGrid(switches);
+    if (anyCollecting) {
+      scheduleCollectingPoll();
+    } else {
+      stopCountdownTick();
+    }
+  }, 2000);
 }
 
 async function loadSwitches() {
@@ -135,6 +183,10 @@ async function loadSwitches() {
   try {
     const switches = await apiGet('/switches');
     renderSwitchGrid(switches);
+    if (switches && switches.some(s => s.status === 'collecting')) {
+      startCountdownTick();
+      scheduleCollectingPoll();
+    }
   } catch (e) {
     switchesGrid.textContent = '';
     const err = el('p', 'alert alert-danger', 'Failed to load switches: ' + e.message);
@@ -178,7 +230,7 @@ function buildSwitchCard(sw) {
   const ip   = el('div', 'switch-ip',   sw.ip);
   append(info, name, ip);
   if (sw.model) append(info, el('div', 'text-sm text-muted mt-1', sw.model));
-  append(header, info, statusBadgeEl(sw.status));
+  append(header, info, statusBadgeEl(sw.status, sw.collecting_since));
   card.appendChild(header);
 
   // Port stats
@@ -242,14 +294,15 @@ async function collectSwitchCard(id, btn) {
   btn.textContent = 'Collecting…';
   try {
     await apiPost(`/switches/${id}/collect`);
-    toast('Collection triggered');
     await loadSwitches();
+    startCountdownTick();
+    scheduleCollectingPoll();
   } catch (e) {
     toast('Collection failed: ' + e.message, 'danger');
-  } finally {
     btn.disabled = false;
     btn.textContent = 'Collect';
   }
+  // Button re-enables automatically when loadSwitches re-renders the card.
 }
 
 async function deleteSwitchById(id, name) {
@@ -327,12 +380,16 @@ document.getElementById('switch-form')?.addEventListener('submit', async e => {
     if (editingSwitchId) {
       await apiPut(`/switches/${editingSwitchId}`, body);
       toast('Switch updated');
+      closeModal();
+      await loadSwitches();
     } else {
       await apiPost('/switches', body);
-      toast('Switch added');
+      toast('Switch added — collecting data…');
+      closeModal();
+      await loadSwitches();
+      startCountdownTick();
+      scheduleCollectingPoll();
     }
-    closeModal();
-    await loadSwitches();
   } catch (err) {
     toast(err.message, 'danger');
   } finally {
@@ -360,7 +417,7 @@ async function initSwitchDetail(id) {
     const statusEl = document.getElementById('sw-status');
     if (statusEl) {
       statusEl.textContent = '';
-      statusEl.appendChild(statusBadgeEl(sw.status));
+      statusEl.appendChild(statusBadgeEl(sw.status, sw.collecting_since));
     }
     await loadSnapshot(id);
     setupTabs();
@@ -656,16 +713,39 @@ document.getElementById('btn-collect')?.addEventListener('click', async function
   this.disabled = true;
   this.textContent = 'Collecting…';
   try {
-    await apiPost(`/switches/${id}/collect`);
-    toast('Collection complete — refreshing data…');
-    await loadSnapshot(id);
+    const res = await apiPost(`/switches/${id}/collect`);
+    // Update the status badge immediately with the countdown.
+    const statusEl = document.getElementById('sw-status');
+    if (statusEl) {
+      statusEl.textContent = '';
+      statusEl.appendChild(statusBadgeEl('collecting', res?.collecting_since));
+    }
+    startCountdownTick();
+    pollDetailCollection(id, this);
   } catch (e) {
     toast('Collection failed: ' + e.message, 'danger');
-  } finally {
     this.disabled = false;
     this.textContent = 'Collect Now';
   }
 });
+
+async function pollDetailCollection(id, btn) {
+  const sw = await apiGet(`/switches/${id}`).catch(() => null);
+  if (!sw) return;
+  const statusEl = document.getElementById('sw-status');
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.appendChild(statusBadgeEl(sw.status, sw.collecting_since));
+  }
+  if (sw.status === 'collecting') {
+    setTimeout(() => pollDetailCollection(id, btn), 2000);
+  } else {
+    stopCountdownTick();
+    if (btn) { btn.disabled = false; btn.textContent = 'Collect Now'; }
+    await loadSnapshot(id);
+    toast('Collection complete — data refreshed');
+  }
+}
 
 document.getElementById('btn-reboot')?.addEventListener('click', async function () {
   const id = document.getElementById('switch-detail')?.dataset.switchId;

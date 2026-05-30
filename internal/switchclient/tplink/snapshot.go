@@ -35,12 +35,13 @@ func (t *TPLink) GetSnapshot(ctx context.Context) (*models.SwitchSnapshot, error
 		{"stats", "/PortStatisticsRpm.htm", t.applyPortStats(snap)},
 	}
 
-	// The switch's embedded web server can handle ~6 rapid sequential requests
-	// before needing a recovery pause. Fetch in batches of 6 with a short
-	// inter-request sleep (500ms) and a longer inter-batch pause (2s).
+	// The switch tolerates ~6 rapid sequential requests before needing recovery.
+	// 200ms between pages within a batch is empirically safe; 1.5s between
+	// batches gives the embedded web server enough time to reset. This yields
+	// ~5-6s total collection time (down from ~8.5s at 500ms/2s).
 	const batchSize = 6
-	const interRequest = 500 * time.Millisecond
-	const interBatch = 2 * time.Second
+	const interRequest = 200 * time.Millisecond
+	const interBatch = 1500 * time.Millisecond
 
 	for i, step := range steps {
 		if err := ctx.Err(); err != nil {
