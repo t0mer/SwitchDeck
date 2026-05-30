@@ -31,6 +31,10 @@ type switchResponse struct {
 	PollStatsSecs  int                 `json:"poll_stats_secs"`
 	PollConfigSecs int                 `json:"poll_config_secs"`
 	Status         models.SwitchStatus `json:"status"`
+	Model          string              `json:"model,omitempty"`
+	PortsTotal     int                 `json:"ports_total"`
+	PortsUp        int                 `json:"ports_up"`
+	PortsDown      int                 `json:"ports_down"`
 }
 
 func cfgToResponse(cfg models.SwitchConfig, status models.SwitchStatus) switchResponse {
@@ -57,6 +61,18 @@ func (h *Handlers) ListSwitches(w http.ResponseWriter, r *http.Request) {
 	resp := make([]switchResponse, len(cfgs))
 	for i, cfg := range cfgs {
 		resp[i] = cfgToResponse(cfg, h.Manager.Status(cfg.ID))
+		if snap, err := h.Store.LatestSnapshot(r.Context(), cfg.ID); err == nil {
+			resp[i].Model = snap.Switch.Model
+			for _, p := range snap.Ports {
+				resp[i].PortsTotal++
+				switch p.Status {
+				case models.PortStatusUp:
+					resp[i].PortsUp++
+				case models.PortStatusDown:
+					resp[i].PortsDown++
+				}
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -161,17 +177,14 @@ func (h *Handlers) DeleteSwitch(w http.ResponseWriter, r *http.Request) {
 // TriggerCollect handles POST /api/v1/switches/{id}/collect.
 func (h *Handlers) TriggerCollect(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	client, err := h.Manager.GetClient(id)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
-	}
-	snap, err := client.GetSnapshot(r.Context())
+	snap, err := h.Manager.CollectNow(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "collection failed: "+err.Error())
 		return
 	}
-	snap.Switch.ID = id
-	h.Store.UpsertSnapshot(r.Context(), snap)
+	if err := h.Store.UpsertSnapshot(r.Context(), snap); err != nil {
+		writeError(w, http.StatusInternalServerError, "store failed: "+err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "collected"})
 }
