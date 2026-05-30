@@ -35,23 +35,26 @@ type worker struct {
 	mu      sync.Mutex
 	last    *models.SwitchSnapshot
 
-	pingMu     sync.Mutex
-	pingConsec int    // consecutive failure count; reset to 0 on success
-	pingReady  bool   // true once at least one probe has completed
-	pingDown   bool   // true when pingConsec >= pingThreshold
-	pingPort   string // management TCP port to probe; normally "80"
+	pingMu       sync.Mutex
+	pingConsec   int    // consecutive failure count; reset to 0 on success
+	pingReady    bool   // true once at least one probe has completed
+	pingDown     bool   // true when pingConsec >= pingThreshold
+	pingPort     string // management TCP port to probe; normally "80"
+	pingChangeFn func(id string, online bool) // called on offline↔online transition
+	pingWasDown  bool                          // previous pingDown value; tracks transitions
 }
 
 // newWorker creates a worker. Call start() to begin collection.
 func newWorker(cfg models.SwitchConfig, client switchclient.Client, onSnap SnapshotFunc, onErr ErrorFunc) *worker {
 	return &worker{
-		cfg:     cfg,
-		client:  client,
-		onSnap:  onSnap,
-		onErr:   onErr,
-		stop:     make(chan struct{}),
-		stopped:  make(chan struct{}),
-		pingPort: "80",
+		cfg:          cfg,
+		client:       client,
+		onSnap:       onSnap,
+		onErr:        onErr,
+		stop:         make(chan struct{}),
+		stopped:      make(chan struct{}),
+		pingPort:     "80",
+		pingChangeFn: func(string, bool) {},
 	}
 }
 
@@ -84,6 +87,7 @@ func (w *worker) pingIsDown() bool {
 // doPing performs a TCP-connect probe to the switch management port.
 // On success the consecutive-failure counter is reset; on failure it is
 // incremented and pingDown is set when it reaches pingThreshold.
+// When pingDown flips value, pingChangeFn is called in a new goroutine.
 func (w *worker) doPing(ctx context.Context) {
 	addr := w.cfg.IP + ":" + w.pingPort
 	conn, err := (&net.Dialer{Timeout: pingTimeout}).DialContext(ctx, "tcp", addr)
@@ -96,11 +100,22 @@ func (w *worker) doPing(ctx context.Context) {
 		if w.pingConsec >= pingThreshold {
 			w.pingDown = true
 		}
-		return
+	} else {
+		conn.Close()
+		w.pingConsec = 0
+		w.pingDown = false
 	}
-	conn.Close()
-	w.pingConsec = 0
-	w.pingDown = false
+	// Fire transition callback when pingDown flips.
+	// Captured outside the lock and called inline; callers must be non-blocking.
+	if w.pingDown != w.pingWasDown {
+		w.pingWasDown = w.pingDown
+		fn := w.pingChangeFn
+		id := w.cfg.ID
+		online := !w.pingDown // online=true means came back up
+		w.pingMu.Unlock()
+		fn(id, online)
+		w.pingMu.Lock() // reacquire so defer Unlock is balanced
+	}
 }
 
 func (w *worker) run() {

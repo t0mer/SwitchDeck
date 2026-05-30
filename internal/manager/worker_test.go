@@ -221,3 +221,56 @@ func TestManagerStatusOfflineWhenPingFails(t *testing.T) {
 	}
 	mgr.Remove("sw-ping")
 }
+
+func TestPingTransitionCallback(t *testing.T) {
+	cfg := models.SwitchConfig{
+		ID: "cb-test", IP: "127.0.0.1",
+		Username: "u", Password: "p",
+		PollStatsSecs: 60, PollConfigSecs: 300,
+	}
+	w := manager.NewTestWorker(cfg, "19999") // nothing listening
+
+	var events []bool
+	manager.SetPingChangeFn(w, func(_ string, online bool) {
+		events = append(events, online)
+	})
+
+	ctx := context.Background()
+
+	// First failure — not yet at threshold, no transition yet
+	w.DoPing(ctx)
+	if len(events) != 0 {
+		t.Errorf("expected 0 events after 1 failure, got %d", len(events))
+	}
+
+	// Second failure — crosses threshold, fires offline (false)
+	w.DoPing(ctx)
+	if len(events) != 1 || events[0] != false {
+		t.Errorf("expected offline event after 2 failures, got %v", events)
+	}
+
+	// Third failure — already offline, no new event
+	w.DoPing(ctx)
+	if len(events) != 1 {
+		t.Errorf("expected no new event on 3rd failure, got %d events", len(events))
+	}
+
+	// Recovery: start a listener and use a new worker pre-seeded as offline
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	w2 := manager.NewTestWorker(cfg, port)
+	manager.SetWorkerOffline(w2)
+
+	var events2 []bool
+	manager.SetPingChangeFn(w2, func(_ string, online bool) {
+		events2 = append(events2, online)
+	})
+	w2.DoPing(ctx)
+	if len(events2) != 1 || events2[0] != true {
+		t.Errorf("expected online event on recovery, got %v", events2)
+	}
+}
