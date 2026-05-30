@@ -1,10 +1,15 @@
 package tplink
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"log"
+	"mime/multipart"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -25,22 +30,28 @@ func New(insecure bool) *TPLink {
 	}
 }
 
-// Login authenticates to the switch. The TL-SG108E closes the TCP connection
-// without sending an HTTP response after receiving valid credentials (TCP RST).
-// This is treated as a success signal, but session validity is confirmed with a
-// subsequent probe GET to distinguish a real login from a general TCP failure.
+// Login authenticates to the switch.
+//
+// The TL-SG108E returns HTTP 200 with the login form HTML after every POST to
+// /logon.cgi. The logonInfo[0] value in the response encodes the result:
+//   0 = session established (browser would redirect to /)
+//   1 = wrong credentials
+//   5 = session timeout
+//
+// On some firmware variants the switch instead drops the connection (TCP RST /
+// EOF). In that case we fall back to a validateSession GET probe.
 func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) error {
 	t.baseURL = strings.TrimRight(rawURL, "/")
 
-	_, err := t.http.PostForm(t.baseURL+"/logon.cgi", map[string]string{
+	// The switch silently ignores POST requests that lack the submit button field.
+	resp, err := t.http.PostForm(t.baseURL+"/logon.cgi", map[string]string{
 		"username": username,
 		"password": password,
+		"logon":    "Login",
 	})
 	if err != nil {
 		if isConnectionReset(err.Error()) {
-			time.Sleep(500 * time.Millisecond)
-			// Validate the session by fetching a known data page.
-			// If credentials were wrong, the switch returns the login form instead.
+			time.Sleep(1500 * time.Millisecond)
 			if err := t.validateSession(ctx); err != nil {
 				return fmt.Errorf("login succeeded (TCP RST) but session validation failed: %w", err)
 			}
@@ -48,7 +59,26 @@ func (t *TPLink) Login(ctx context.Context, rawURL, username, password string) e
 		}
 		return fmt.Errorf("login POST: %w", err)
 	}
-	return nil
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read login response: %w", err)
+	}
+	// Check the errType embedded in the login page HTML.
+	errType := extractLogonErrType(string(body))
+	switch errType {
+	case 0:
+		return nil // session established
+	case 1:
+		return fmt.Errorf("authentication failed: wrong username or password")
+	case 5:
+		return fmt.Errorf("authentication failed: session timeout")
+	default:
+		if strings.Contains(string(body), `action="/logon.cgi"`) {
+			return fmt.Errorf("authentication failed: errType=%d", errType)
+		}
+		return nil // unrecognised response but no login form — treat as success
+	}
 }
 
 // Logout terminates the switch session.
@@ -65,11 +95,25 @@ func (t *TPLink) Logout(ctx context.Context) error {
 	return nil
 }
 
+// extractLogonErrType parses logonInfo[0] out of the login page HTML.
+// Returns -1 if not found.
+func extractLogonErrType(html string) int {
+	re := regexp.MustCompile(`logonInfo\s*=\s*new\s+Array\s*\(\s*(\d+)`)
+	m := re.FindStringSubmatch(html)
+	if len(m) < 2 {
+		return -1
+	}
+	var v int
+	fmt.Sscanf(m[1], "%d", &v)
+	return v
+}
+
 // isConnectionReset returns true for errors that indicate the server closed the
 // connection without a response — the TL-SG108E's authentication confirmation signal.
 // Deliberately narrow: we do not want to treat general I/O errors as success.
 func isConnectionReset(msg string) bool {
 	for _, s := range []string{
+		"EOF",
 		"connection reset by peer",
 		"connection reset",
 		"broken pipe",
@@ -102,6 +146,11 @@ func (t *TPLink) validateSession(ctx context.Context) error {
 	// The login page always contains action="/logon.cgi"
 	// An authenticated page contains "var info_ds"
 	if strings.Contains(string(body), `action="/logon.cgi"`) {
+		preview := string(body)
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		log.Printf("tplink: session probe returned login form (body[0:200]: %q)", preview)
 		return fmt.Errorf("authentication failed: credentials rejected")
 	}
 	return nil
@@ -130,6 +179,8 @@ func (t *TPLink) fetchPage(ctx context.Context, path string) (string, error) {
 }
 
 // postAction POSTs form data to a switch page and verifies a successful response.
+// The TL-SG108E closes the TCP connection after every POST (same RST behaviour as
+// login), so EOF / connection-reset is treated as success just like login.
 func (t *TPLink) postAction(ctx context.Context, path string, data map[string]string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+path, formBody(data))
 	if err != nil {
@@ -138,9 +189,64 @@ func (t *TPLink) postAction(ctx context.Context, path string, data map[string]st
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := t.http.Do(req)
 	if err != nil {
-		// Do NOT treat connection reset as success for configuration actions.
-		// If the switch drops the connection during a config write, the
-		// operation state is unknown and should be treated as an error.
+		// The TL-SG108E RSTs the connection after every POST, including config
+		// writes. There is no HTTP response to confirm the change was applied —
+		// RST-as-success is the only signal this firmware provides for any POST.
+		if isConnectionReset(err.Error()) {
+			return nil
+		}
+		return fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("POST %s: unexpected status %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// getAction sends a GET request with params encoded in the query string.
+// This is the correct method for most TL-SG108E write operations — the
+// HTML forms have no method attribute so browsers default to GET.
+func (t *TPLink) getAction(ctx context.Context, path string, params map[string]string) error {
+	v := url.Values{}
+	for k, val := range params {
+		v.Set(k, val)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+path+"?"+v.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
+// postMultipart POSTs multipart/form-data to a switch CGI endpoint.
+// Used for actions whose form uses enctype=multipart/form-data (e.g. port_setting.cgi).
+func (t *TPLink) postMultipart(ctx context.Context, path string, data map[string]string) error {
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	for k, v := range data {
+		if err := w.WriteField(k, v); err != nil {
+			return fmt.Errorf("build multipart field %s: %w", k, err)
+		}
+	}
+	w.Close()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+path, &body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	resp, err := t.http.Do(req)
+	if err != nil {
+		if isConnectionReset(err.Error()) {
+			return nil
+		}
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
 	defer resp.Body.Close()

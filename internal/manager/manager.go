@@ -111,6 +111,31 @@ func (m *Manager) GetClient(id string) (switchclient.Client, error) {
 	return w.client, nil
 }
 
+// CollectNow performs an immediate full collection for a switch using a fresh
+// authenticated client session independent of the background worker.
+// On success it updates the worker's cached last snapshot.
+func (m *Manager) CollectNow(ctx context.Context, id string) (*models.SwitchSnapshot, error) {
+	m.mu.RLock()
+	w, ok := m.workers[id]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("switch %s not in pool", id)
+	}
+	client := m.factory(w.cfg.InsecureTLS)
+	if err := client.Login(ctx, "http://"+w.cfg.IP, w.cfg.Username, w.cfg.Password); err != nil {
+		return nil, fmt.Errorf("login: %w", err)
+	}
+	snap, err := client.GetSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	snap.Switch.ID = id
+	w.mu.Lock()
+	w.last = snap
+	w.mu.Unlock()
+	return snap, nil
+}
+
 // LastSnapshot returns the most recently collected snapshot for a switch.
 func (m *Manager) LastSnapshot(id string) (*models.SwitchSnapshot, error) {
 	m.mu.RLock()

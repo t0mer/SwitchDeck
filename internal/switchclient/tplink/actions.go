@@ -5,56 +5,35 @@ import (
 	"fmt"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
+	"github.com/t0mer/SwitchDeck/internal/switchclient/tplink/parser"
 )
 
-func speedConfigCode(s models.PortSpeed) string {
-	switch s {
-	case models.PortSpeed10M:
-		return "3"
-	case models.PortSpeed100M:
-		return "5"
-	case models.PortSpeed1G:
-		return "6"
-	default:
-		return "1" // Auto
-	}
-}
-
 // SetPort configures a single port's enable state, speed, and flow control.
-// The switch requires the full state for all 8 ports to be submitted.
+// The form has no method attribute so the browser sends a GET with query params.
 func (t *TPLink) SetPort(ctx context.Context, port int, cfg models.PortConfig) error {
 	if port < 1 || port > 8 {
 		return fmt.Errorf("invalid port number %d (must be 1-8)", port)
 	}
-	state := make([]string, 8)
-	speed := make([]string, 8)
-	fc := make([]string, 8)
-	for i := range state {
-		state[i] = "1"
-		speed[i] = "1"
-		fc[i] = "0"
-	}
-	idx := port - 1
+	state := "0"
 	if cfg.Enabled {
-		state[idx] = "1"
-	} else {
-		state[idx] = "0"
+		state = "1"
 	}
-	speed[idx] = speedConfigCode(cfg.Speed)
+	fc := "0"
 	if cfg.FlowControl {
-		fc[idx] = "1"
+		fc = "1"
 	}
-	return t.postAction(ctx, "/PortSettingRpm.htm", map[string]string{
-		"state":   joinStrings(state),
-		"spd_cfg": joinStrings(speed),
-		"fc_cfg":  joinStrings(fc),
-		"apply":   "apply",
+	return t.getAction(ctx, "/port_setting.cgi", map[string]string{
+		"portid":      fmt.Sprintf("%d", port),
+		"state":       state,
+		"speed":       parser.CfgSpeedCode(cfg.Speed),
+		"flowcontrol": fc,
+		"apply":       "Apply",
 	})
 }
 
 // ResetPortCounters clears all port TX/RX counters.
 func (t *TPLink) ResetPortCounters(ctx context.Context) error {
-	return t.postAction(ctx, "/PortStatisticsRpm.htm", map[string]string{"clean": "clean"})
+	return t.getAction(ctx, "/port_statistics_set.cgi", map[string]string{"clear": "Clear"})
 }
 
 // SetVLANs writes 802.1Q VLAN configuration to the switch.
@@ -156,10 +135,10 @@ func (t *TPLink) SetQoS(ctx context.Context, qos models.QoSStatus) error {
 			pris[p.PortNumber-1] = fmt.Sprintf("%d", p.Priority)
 		}
 	}
-	return t.postAction(ctx, "/QosBasicRpm.htm", map[string]string{
+	return t.postAction(ctx, "/qos_mode_set.cgi", map[string]string{
 		"qosMode": modeCode,
 		"pPri":    joinStrings(pris),
-		"apply":   "apply",
+		"apply":   "Apply",
 	})
 }
 
@@ -180,9 +159,9 @@ func (t *TPLink) SetBandwidth(ctx context.Context, bw []models.BandwidthControl)
 		vals[base+1] = fmt.Sprintf("%d", b.IngressRateKbps)
 		vals[base+2] = fmt.Sprintf("%d", b.EgressRateKbps)
 	}
-	return t.postAction(ctx, "/QosBandWidthControlRpm.htm", map[string]string{
+	return t.postAction(ctx, "/qos_bandwidth_set.cgi", map[string]string{
 		"bcInfo": joinStrings(vals),
-		"apply":  "apply",
+		"applay": "Apply",
 	})
 }
 
@@ -201,9 +180,9 @@ func (t *TPLink) SetStormControl(ctx context.Context, sc []models.StormControl) 
 		vals[base+1] = fmt.Sprintf("%d", s.MulticastKbps)
 		vals[base+2] = fmt.Sprintf("%d", s.UnknownUnicastKbps)
 	}
-	return t.postAction(ctx, "/QosStormControlRpm.htm", map[string]string{
+	return t.postAction(ctx, "/qos_storm_set.cgi", map[string]string{
 		"scInfo": joinStrings(vals),
-		"apply":  "apply",
+		"applay": "Apply",
 	})
 }
 
@@ -213,7 +192,11 @@ func (t *TPLink) SetIGMP(ctx context.Context, enabled bool) error {
 	if enabled {
 		v = "1"
 	}
-	return t.postAction(ctx, "/IgmpSnoopingRpm.htm", map[string]string{"enable": v, "apply": "apply"})
+	return t.getAction(ctx, "/igmpSnooping.cgi", map[string]string{
+		"igmp_mode":     v,
+		"reportSu_mode": "0",
+		"Apply":         "Apply",
+	})
 }
 
 // SetLoopPrevention enables or disables loop prevention.
@@ -222,11 +205,16 @@ func (t *TPLink) SetLoopPrevention(ctx context.Context, enabled bool) error {
 	if enabled {
 		v = "1"
 	}
-	return t.postAction(ctx, "/LoopPreventionRpm.htm", map[string]string{"lpEn": v, "apply": "apply"})
+	return t.getAction(ctx, "/loop_prevention_set.cgi", map[string]string{
+		"lpEn":  v,
+		"apply": "Apply",
+	})
 }
 
 // Reboot reboots the switch. The switch will be unreachable for ~30 seconds.
-// A connection reset after the reboot POST is expected and treated as success.
 func (t *TPLink) Reboot(ctx context.Context) error {
-	return t.postReboot(ctx)
+	return t.postAction(ctx, "/reboot.cgi", map[string]string{
+		"reboot_op": "reboot",
+		"save_op":   "false",
+	})
 }
