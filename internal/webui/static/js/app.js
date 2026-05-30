@@ -537,12 +537,18 @@ function renderPortsTab(snap, switchId) {
 
 async function togglePort(switchId, portNum, checkbox) {
   const enabled = checkbox.checked;
+  checkbox.disabled = true;
   try {
-    await apiPatch(`/switches/${switchId}/ports/${portNum}`, { enabled });
+    const res = await apiPatch(`/switches/${switchId}/ports/${portNum}`, { enabled });
     toast(`Port ${portNum} ${enabled ? 'enabled' : 'disabled'}`);
+    if (res && res.ports) {
+      renderPortsTab({ ports: res.ports }, switchId);
+    }
   } catch (e) {
     checkbox.checked = !enabled;
     toast('Failed: ' + e.message, 'danger');
+  } finally {
+    checkbox.disabled = false;
   }
 }
 

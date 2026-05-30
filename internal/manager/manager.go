@@ -157,6 +157,32 @@ func (m *Manager) CollectNow(ctx context.Context, id string) (*models.SwitchSnap
 	return snap, nil
 }
 
+// RefreshPorts fetches only /PortSettingRpm.htm for a switch using a fresh
+// authenticated session, updates the worker's cached snapshot, and returns
+// the updated port list. Used to confirm a port-settings write landed.
+func (m *Manager) RefreshPorts(ctx context.Context, id string) ([]models.Port, error) {
+	m.mu.RLock()
+	w, ok := m.workers[id]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("switch %s not in pool", id)
+	}
+	client := m.factory(w.cfg.InsecureTLS)
+	if err := client.Login(ctx, "http://"+w.cfg.IP, w.cfg.Username, w.cfg.Password); err != nil {
+		return nil, fmt.Errorf("login: %w", err)
+	}
+	ports, err := client.RefreshPorts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	w.mu.Lock()
+	if w.last != nil {
+		w.last.Ports = ports
+	}
+	w.mu.Unlock()
+	return ports, nil
+}
+
 // LastSnapshot returns the most recently collected snapshot for a switch.
 func (m *Manager) LastSnapshot(id string) (*models.SwitchSnapshot, error) {
 	m.mu.RLock()
@@ -182,6 +208,9 @@ func (m *Manager) Status(id string) models.SwitchStatus {
 	w, ok := m.workers[id]
 	if !ok {
 		return models.SwitchStatusUnknown
+	}
+	if w.pingIsDown() {
+		return models.SwitchStatusOffline
 	}
 	if w.lastSnapshot() != nil {
 		return models.SwitchStatusOnline
