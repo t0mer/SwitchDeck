@@ -40,17 +40,32 @@ function setText(id, text) {
   if (e) e.textContent = text ?? '';
 }
 
-/** Build a status badge element. */
-function statusBadgeEl(status) {
+// Approximate collection duration in seconds (matches backend batch constants).
+const COLLECT_SECS = 6;
+
+/** Build a status badge element. collectingSince is a Unix timestamp (seconds). */
+function statusBadgeEl(status, collectingSince) {
   const map = {
-    online:     ['badge-success',    'Online'],
-    offline:    ['badge-danger',     'Offline'],
-    unknown:    ['badge-neutral',    'Unknown'],
-    collecting: ['badge-collecting', 'Collecting…'],
-    error:      ['badge-danger',     'Error'],
+    online:     ['badge-success', 'Online'],
+    offline:    ['badge-danger',  'Offline'],
+    unknown:    ['badge-neutral', 'Unknown'],
+    error:      ['badge-danger',  'Error'],
   };
+  if (status === 'collecting') {
+    const badge = el('span', 'badge badge-collecting');
+    if (collectingSince) badge.dataset.since = collectingSince;
+    badge.textContent = collectingLabel(collectingSince);
+    return badge;
+  }
   const [cls, label] = map[status] || map.unknown;
   return el('span', `badge ${cls}`, label);
+}
+
+function collectingLabel(since) {
+  if (!since) return 'Collecting…';
+  const elapsed = Math.floor(Date.now() / 1000) - since;
+  const remaining = Math.max(0, COLLECT_SECS - elapsed);
+  return remaining > 0 ? `Collecting ~${remaining}s` : 'Finalizing…';
 }
 
 /** Build a port status dot + text span. */
@@ -125,6 +140,21 @@ const switchesGrid = document.getElementById('switches-grid');
 if (switchesGrid) initDashboard();
 
 let _pollTimer = null;
+let _tickTimer = null;
+
+function startCountdownTick() {
+  clearInterval(_tickTimer);
+  _tickTimer = setInterval(() => {
+    document.querySelectorAll('.badge-collecting[data-since]').forEach(badge => {
+      badge.textContent = collectingLabel(parseInt(badge.dataset.since));
+    });
+  }, 1000);
+}
+
+function stopCountdownTick() {
+  clearInterval(_tickTimer);
+  _tickTimer = null;
+}
 
 async function initDashboard() {
   await loadSwitches();
@@ -137,7 +167,11 @@ function scheduleCollectingPoll() {
     if (!switches) return;
     const anyCollecting = switches.some(s => s.status === 'collecting');
     renderSwitchGrid(switches);
-    if (anyCollecting) scheduleCollectingPoll();
+    if (anyCollecting) {
+      scheduleCollectingPoll();
+    } else {
+      stopCountdownTick();
+    }
   }, 2000);
 }
 
@@ -150,6 +184,7 @@ async function loadSwitches() {
     const switches = await apiGet('/switches');
     renderSwitchGrid(switches);
     if (switches && switches.some(s => s.status === 'collecting')) {
+      startCountdownTick();
       scheduleCollectingPoll();
     }
   } catch (e) {
@@ -195,7 +230,7 @@ function buildSwitchCard(sw) {
   const ip   = el('div', 'switch-ip',   sw.ip);
   append(info, name, ip);
   if (sw.model) append(info, el('div', 'text-sm text-muted mt-1', sw.model));
-  append(header, info, statusBadgeEl(sw.status));
+  append(header, info, statusBadgeEl(sw.status, sw.collecting_since));
   card.appendChild(header);
 
   // Port stats
@@ -351,6 +386,7 @@ document.getElementById('switch-form')?.addEventListener('submit', async e => {
       toast('Switch added — collecting data…');
       closeModal();
       await loadSwitches();
+      startCountdownTick();
       scheduleCollectingPoll();
     }
   } catch (err) {
@@ -380,7 +416,7 @@ async function initSwitchDetail(id) {
     const statusEl = document.getElementById('sw-status');
     if (statusEl) {
       statusEl.textContent = '';
-      statusEl.appendChild(statusBadgeEl(sw.status));
+      statusEl.appendChild(statusBadgeEl(sw.status, sw.collecting_since));
     }
     await loadSnapshot(id);
     setupTabs();

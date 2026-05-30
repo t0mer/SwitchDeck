@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
 	"github.com/t0mer/SwitchDeck/internal/store"
@@ -115,7 +116,17 @@ func (m *Manager) GetClient(id string) (switchclient.Client, error) {
 // MarkCollecting marks a switch as currently collecting so Status() reflects
 // it immediately — call this before launching a background CollectNow goroutine.
 func (m *Manager) MarkCollecting(id string) {
-	m.collecting.Store(id, struct{}{})
+	m.collecting.Store(id, time.Now())
+}
+
+// CollectingStartedAt returns the time collection began for a switch, if active.
+func (m *Manager) CollectingStartedAt(id string) (time.Time, bool) {
+	v, ok := m.collecting.Load(id)
+	if !ok {
+		return time.Time{}, false
+	}
+	t, ok := v.(time.Time)
+	return t, ok
 }
 
 // CollectNow performs an immediate full collection for a switch using a fresh
@@ -128,7 +139,7 @@ func (m *Manager) CollectNow(ctx context.Context, id string) (*models.SwitchSnap
 	if !ok {
 		return nil, fmt.Errorf("switch %s not in pool", id)
 	}
-	m.collecting.Store(id, struct{}{})
+	m.collecting.Store(id, time.Now())
 	defer m.collecting.Delete(id)
 
 	client := m.factory(w.cfg.InsecureTLS)
@@ -163,7 +174,7 @@ func (m *Manager) LastSnapshot(id string) (*models.SwitchSnapshot, error) {
 
 // Status returns the runtime reachability status of a switch.
 func (m *Manager) Status(id string) models.SwitchStatus {
-	if _, collecting := m.collecting.Load(id); collecting {
+	if _, ok := m.collecting.Load(id); ok {
 		return models.SwitchStatusCollecting
 	}
 	m.mu.RLock()
