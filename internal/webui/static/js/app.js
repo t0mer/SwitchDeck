@@ -43,10 +43,11 @@ function setText(id, text) {
 /** Build a status badge element. */
 function statusBadgeEl(status) {
   const map = {
-    online:  ['badge-success', 'Online'],
-    offline: ['badge-danger',  'Offline'],
-    unknown: ['badge-neutral', 'Unknown'],
-    error:   ['badge-danger',  'Error'],
+    online:     ['badge-success',    'Online'],
+    offline:    ['badge-danger',     'Offline'],
+    unknown:    ['badge-neutral',    'Unknown'],
+    collecting: ['badge-collecting', 'Collecting…'],
+    error:      ['badge-danger',     'Error'],
   };
   const [cls, label] = map[status] || map.unknown;
   return el('span', `badge ${cls}`, label);
@@ -123,8 +124,21 @@ function formatDuration(ns) {
 const switchesGrid = document.getElementById('switches-grid');
 if (switchesGrid) initDashboard();
 
+let _pollTimer = null;
+
 async function initDashboard() {
   await loadSwitches();
+}
+
+function scheduleCollectingPoll() {
+  clearTimeout(_pollTimer);
+  _pollTimer = setTimeout(async () => {
+    const switches = await apiGet('/switches').catch(() => null);
+    if (!switches) return;
+    const anyCollecting = switches.some(s => s.status === 'collecting');
+    renderSwitchGrid(switches);
+    if (anyCollecting) scheduleCollectingPoll();
+  }, 2000);
 }
 
 async function loadSwitches() {
@@ -135,6 +149,9 @@ async function loadSwitches() {
   try {
     const switches = await apiGet('/switches');
     renderSwitchGrid(switches);
+    if (switches && switches.some(s => s.status === 'collecting')) {
+      scheduleCollectingPoll();
+    }
   } catch (e) {
     switchesGrid.textContent = '';
     const err = el('p', 'alert alert-danger', 'Failed to load switches: ' + e.message);

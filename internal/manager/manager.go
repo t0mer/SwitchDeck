@@ -15,11 +15,12 @@ type ClientFactory func(insecure bool) switchclient.Client
 
 // Manager orchestrates the collection pool across all registered switches.
 type Manager struct {
-	factory  ClientFactory
-	mu       sync.RWMutex
-	workers  map[string]*worker
-	snapFunc SnapshotFunc
-	errFunc  ErrorFunc
+	factory    ClientFactory
+	mu         sync.RWMutex
+	workers    map[string]*worker
+	collecting sync.Map // string → struct{}: switches currently collecting
+	snapFunc   SnapshotFunc
+	errFunc    ErrorFunc
 }
 
 // New creates a Manager. factory is called when a switch is added.
@@ -121,6 +122,9 @@ func (m *Manager) CollectNow(ctx context.Context, id string) (*models.SwitchSnap
 	if !ok {
 		return nil, fmt.Errorf("switch %s not in pool", id)
 	}
+	m.collecting.Store(id, struct{}{})
+	defer m.collecting.Delete(id)
+
 	client := m.factory(w.cfg.InsecureTLS)
 	if err := client.Login(ctx, "http://"+w.cfg.IP, w.cfg.Username, w.cfg.Password); err != nil {
 		return nil, fmt.Errorf("login: %w", err)
@@ -153,6 +157,9 @@ func (m *Manager) LastSnapshot(id string) (*models.SwitchSnapshot, error) {
 
 // Status returns the runtime reachability status of a switch.
 func (m *Manager) Status(id string) models.SwitchStatus {
+	if _, collecting := m.collecting.Load(id); collecting {
+		return models.SwitchStatusCollecting
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	w, ok := m.workers[id]
