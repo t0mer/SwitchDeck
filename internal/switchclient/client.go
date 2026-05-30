@@ -15,6 +15,7 @@ type Client interface {
 	// Data collection
 	GetSnapshot(ctx context.Context) (*models.SwitchSnapshot, error)
 	RefreshStats(ctx context.Context) ([]models.PortStats, error)
+	RefreshPorts(ctx context.Context) ([]models.Port, error)
 
 	// Port actions
 	SetPort(ctx context.Context, port int, cfg models.PortConfig) error
