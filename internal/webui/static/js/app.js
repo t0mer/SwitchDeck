@@ -805,3 +805,218 @@ document.getElementById('btn-gen-token')?.addEventListener('click', () => {
   document.getElementById('s-auth-token').value =
     Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ══════════════════════════════════════════════════════════════════════════
+
+const notifList = document.getElementById('notif-list');
+if (notifList) initNotifications();
+
+async function initNotifications() {
+  await loadNotifications();
+}
+
+async function loadNotifications() {
+  try {
+    const channels = await apiGet('/notifications');
+    renderNotifList(channels || []);
+  } catch (e) {
+    const errEl = el('p', 'alert alert-danger');
+    errEl.style.margin = '12px';
+    errEl.textContent = 'Failed to load: ' + e.message;
+    notifList.textContent = '';
+    notifList.appendChild(errEl);
+  }
+}
+
+function renderNotifList(channels) {
+  notifList.textContent = '';
+  if (!channels.length) {
+    const empty = el('p', 'text-muted', 'No notification channels configured.');
+    empty.style.padding = '16px';
+    notifList.appendChild(empty);
+    return;
+  }
+  const wrapper = el('div', 'table-wrapper');
+  const table = el('table');
+  const thead = el('thead');
+  const hr = el('tr');
+  for (const h of ['Name', 'Provider', 'Offline', 'Online', 'Enabled', '']) {
+    hr.appendChild(el('th', null, h));
+  }
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody = el('tbody');
+  for (const ch of channels) {
+    const row = el('tr');
+    row.appendChild(el('td', null, ch.name));
+    row.appendChild(el('td', null, ch.provider));
+    row.appendChild(el('td', null, ch.notify_offline ? '✓' : '—'));
+    row.appendChild(el('td', null, ch.notify_online ? '✓' : '—'));
+    row.appendChild(el('td', null, ch.enabled ? '✓' : '—'));
+    const actions = el('td');
+    const editBtn = el('button', 'btn btn-ghost btn-sm', 'Edit');
+    editBtn.addEventListener('click', () => openEditNotifModal(ch));
+    const delBtn = el('button', 'btn btn-danger btn-sm', 'Delete');
+    delBtn.style.marginLeft = '6px';
+    delBtn.addEventListener('click', () => deleteNotif(ch.id, ch.name));
+    append(actions, editBtn, delBtn);
+    row.appendChild(actions);
+    tbody.appendChild(row);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  notifList.appendChild(wrapper);
+}
+
+// ── Provider field toggling ───────────────────────────────────────────────
+
+document.getElementById('nf-provider')?.addEventListener('change', function () {
+  switchNotifFields(this.value);
+});
+
+function switchNotifFields(provider) {
+  ['shoutrrr', 'greenapi', 'whatsapp_web'].forEach(p => {
+    const divEl = document.getElementById('nf-fields-' + p);
+    if (divEl) divEl.classList.toggle('hidden', p !== provider);
+  });
+}
+
+// ── Modal helpers ──────────────────────────────────────────────────────────
+
+let editingNotifId = null;
+
+function openAddNotifModal() {
+  editingNotifId = null;
+  setText('notif-modal-title', 'Add Channel');
+  document.getElementById('notif-form').reset();
+  switchNotifFields('shoutrrr');
+  document.getElementById('nf-test-result').classList.add('hidden');
+  document.getElementById('notif-modal-backdrop').classList.remove('hidden');
+}
+
+function openEditNotifModal(ch) {
+  editingNotifId = ch.id;
+  setText('notif-modal-title', 'Edit Channel');
+  document.getElementById('nf-name').value = ch.name || '';
+  document.getElementById('nf-provider').value = ch.provider || 'shoutrrr';
+  switchNotifFields(ch.provider);
+  try {
+    const cfg = JSON.parse(ch.config || '{}');
+    if (ch.provider === 'shoutrrr') {
+      document.getElementById('nf-url').value = cfg.url || '';
+    } else if (ch.provider === 'greenapi') {
+      document.getElementById('nf-instance-id').value = cfg.instance_id || '';
+      document.getElementById('nf-ga-token').value = cfg.token || '';
+      document.getElementById('nf-recipient').value = cfg.recipient || '';
+      document.getElementById('nf-api-url').value = cfg.api_url || '';
+    } else if (ch.provider === 'whatsapp_web') {
+      document.getElementById('nf-base-url').value = cfg.base_url || '';
+      document.getElementById('nf-wa-recipient').value = cfg.recipient || '';
+      document.getElementById('nf-wa-username').value = cfg.username || '';
+      document.getElementById('nf-wa-password').value = cfg.password || '';
+    }
+  } catch {}
+  document.getElementById('nf-notify-offline').checked = ch.notify_offline;
+  document.getElementById('nf-notify-online').checked = ch.notify_online;
+  document.getElementById('nf-enabled').checked = ch.enabled;
+  document.getElementById('nf-test-result').classList.add('hidden');
+  document.getElementById('notif-modal-backdrop').classList.remove('hidden');
+}
+
+function closeNotifModal() {
+  document.getElementById('notif-modal-backdrop').classList.add('hidden');
+  editingNotifId = null;
+}
+
+function buildNotifConfig(provider) {
+  if (provider === 'shoutrrr') {
+    return JSON.stringify({ url: document.getElementById('nf-url').value.trim() });
+  }
+  if (provider === 'greenapi') {
+    return JSON.stringify({
+      instance_id: document.getElementById('nf-instance-id').value.trim(),
+      token:       document.getElementById('nf-ga-token').value.trim(),
+      recipient:   document.getElementById('nf-recipient').value.trim(),
+      api_url:     document.getElementById('nf-api-url').value.trim(),
+    });
+  }
+  return JSON.stringify({
+    base_url:  document.getElementById('nf-base-url').value.trim(),
+    recipient: document.getElementById('nf-wa-recipient').value.trim(),
+    username:  document.getElementById('nf-wa-username').value.trim(),
+    password:  document.getElementById('nf-wa-password').value.trim(),
+  });
+}
+
+// ── Event handlers ─────────────────────────────────────────────────────────
+
+document.getElementById('btn-add-notif')?.addEventListener('click', openAddNotifModal);
+document.getElementById('btn-close-notif-modal')?.addEventListener('click', closeNotifModal);
+document.getElementById('btn-cancel-notif-modal')?.addEventListener('click', closeNotifModal);
+document.getElementById('notif-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeNotifModal();
+});
+
+document.getElementById('notif-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  btn.disabled = true;
+  const provider = document.getElementById('nf-provider').value;
+  const body = {
+    name:           document.getElementById('nf-name').value.trim(),
+    provider,
+    config:         buildNotifConfig(provider),
+    notify_offline: document.getElementById('nf-notify-offline').checked,
+    notify_online:  document.getElementById('nf-notify-online').checked,
+    enabled:        document.getElementById('nf-enabled').checked,
+  };
+  try {
+    if (editingNotifId) {
+      await apiPut('/notifications/' + editingNotifId, body);
+      toast('Channel updated');
+    } else {
+      await apiPost('/notifications', body);
+      toast('Channel added');
+    }
+    closeNotifModal();
+    await loadNotifications();
+  } catch (err) {
+    toast(err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-test-notif')?.addEventListener('click', async function () {
+  const provider = document.getElementById('nf-provider').value;
+  const resultEl = document.getElementById('nf-test-result');
+  this.disabled = true;
+  this.textContent = 'Sending…';
+  resultEl.className = 'hidden';
+  try {
+    await apiPost('/notifications/test', {
+      provider,
+      config: buildNotifConfig(provider),
+    });
+    resultEl.className = 'alert alert-success';
+    resultEl.textContent = '✓ Test message sent successfully';
+  } catch (err) {
+    resultEl.className = 'alert alert-danger';
+    resultEl.textContent = 'Error: ' + err.message;
+  } finally {
+    this.disabled = false;
+    this.textContent = 'Send Test';
+  }
+});
+
+async function deleteNotif(id, name) {
+  if (!confirm('Delete channel "' + name + '"?')) return;
+  try {
+    await apiDel('/notifications/' + id);
+    toast('Channel deleted');
+    await loadNotifications();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 'danger');
+  }
+}
