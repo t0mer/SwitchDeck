@@ -118,10 +118,15 @@ func (w *worker) run() {
 	statsDur := time.Duration(w.cfg.PollStatsSecs) * time.Second
 	configDur := time.Duration(w.cfg.PollConfigSecs) * time.Second
 
-	statsTicker := time.NewTicker(statsDur)
+	statsTicker  := time.NewTicker(statsDur)
 	configTicker := time.NewTicker(configDur)
+	pingTicker   := time.NewTicker(pingInterval)
 	defer statsTicker.Stop()
 	defer configTicker.Stop()
+	defer pingTicker.Stop()
+
+	// First probe fires immediately so status is known within seconds of startup.
+	go w.doPing(ctx)
 
 	for {
 		select {
@@ -131,6 +136,8 @@ func (w *worker) run() {
 			w.collectFull(ctx)
 		case <-statsTicker.C:
 			w.collectStats(ctx)
+		case <-pingTicker.C:
+			go w.doPing(ctx)
 		}
 	}
 }
