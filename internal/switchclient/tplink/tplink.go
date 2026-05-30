@@ -8,6 +8,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -201,6 +202,27 @@ func (t *TPLink) postAction(ctx context.Context, path string, data map[string]st
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("POST %s: unexpected status %d", path, resp.StatusCode)
 	}
+	return nil
+}
+
+// getAction sends a GET request with params encoded in the query string.
+// This is the correct method for most TL-SG108E write operations — the
+// HTML forms have no method attribute so browsers default to GET.
+func (t *TPLink) getAction(ctx context.Context, path string, params map[string]string) error {
+	v := url.Values{}
+	for k, val := range params {
+		v.Set(k, val)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+path+"?"+v.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
 	return nil
 }
 
