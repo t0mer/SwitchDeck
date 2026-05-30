@@ -10,15 +10,15 @@ const (
 
 // Channel is a configured notification destination.
 type Channel struct {
-	ID            string
-	Name          string
-	Provider      string
-	Config        string // decrypted JSON, plaintext in memory only
-	Enabled       bool
-	NotifyOffline bool
-	NotifyOnline  bool
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Provider      string    `json:"provider"`
+	Config        string    `json:"config"` // decrypted JSON, plaintext in memory only
+	Enabled       bool      `json:"enabled"`
+	NotifyOffline bool      `json:"notify_offline"`
+	NotifyOnline  bool      `json:"notify_online"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // ShoutrrrConfig holds the single URL for a Shoutrrr channel.
