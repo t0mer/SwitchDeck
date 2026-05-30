@@ -294,14 +294,15 @@ async function collectSwitchCard(id, btn) {
   btn.textContent = 'Collecting…';
   try {
     await apiPost(`/switches/${id}/collect`);
-    toast('Collection triggered');
     await loadSwitches();
+    startCountdownTick();
+    scheduleCollectingPoll();
   } catch (e) {
     toast('Collection failed: ' + e.message, 'danger');
-  } finally {
     btn.disabled = false;
     btn.textContent = 'Collect';
   }
+  // Button re-enables automatically when loadSwitches re-renders the card.
 }
 
 async function deleteSwitchById(id, name) {
@@ -712,16 +713,39 @@ document.getElementById('btn-collect')?.addEventListener('click', async function
   this.disabled = true;
   this.textContent = 'Collecting…';
   try {
-    await apiPost(`/switches/${id}/collect`);
-    toast('Collection complete — refreshing data…');
-    await loadSnapshot(id);
+    const res = await apiPost(`/switches/${id}/collect`);
+    // Update the status badge immediately with the countdown.
+    const statusEl = document.getElementById('sw-status');
+    if (statusEl) {
+      statusEl.textContent = '';
+      statusEl.appendChild(statusBadgeEl('collecting', res?.collecting_since));
+    }
+    startCountdownTick();
+    pollDetailCollection(id, this);
   } catch (e) {
     toast('Collection failed: ' + e.message, 'danger');
-  } finally {
     this.disabled = false;
     this.textContent = 'Collect Now';
   }
 });
+
+async function pollDetailCollection(id, btn) {
+  const sw = await apiGet(`/switches/${id}`).catch(() => null);
+  if (!sw) return;
+  const statusEl = document.getElementById('sw-status');
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.appendChild(statusBadgeEl(sw.status, sw.collecting_since));
+  }
+  if (sw.status === 'collecting') {
+    setTimeout(() => pollDetailCollection(id, btn), 2000);
+  } else {
+    stopCountdownTick();
+    if (btn) { btn.disabled = false; btn.textContent = 'Collect Now'; }
+    await loadSnapshot(id);
+    toast('Collection complete — data refreshed');
+  }
+}
 
 document.getElementById('btn-reboot')?.addEventListener('click', async function () {
   const id = document.getElementById('switch-detail')?.dataset.switchId;

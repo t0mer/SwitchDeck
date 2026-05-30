@@ -198,16 +198,37 @@ func (h *Handlers) DeleteSwitch(w http.ResponseWriter, r *http.Request) {
 }
 
 // TriggerCollect handles POST /api/v1/switches/{id}/collect.
+// Returns 202 immediately and runs the collection in the background so the
+// UI can show a live countdown while it progresses.
 func (h *Handlers) TriggerCollect(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	snap, err := h.Manager.CollectNow(r.Context(), id)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "collection failed: "+err.Error())
+	if _, err := h.Store.GetSwitch(r.Context(), id, h.EncKey); err != nil {
+		writeError(w, http.StatusNotFound, "switch not found")
 		return
 	}
-	if err := h.Store.UpsertSnapshot(r.Context(), snap); err != nil {
-		writeError(w, http.StatusInternalServerError, "store failed: "+err.Error())
+	// If already collecting return current status without starting a second run.
+	if t, ok := h.Manager.CollectingStartedAt(id); ok {
+		writeJSON(w, http.StatusAccepted, map[string]interface{}{
+			"status": "collecting", "collecting_since": t.Unix(),
+		})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "collected"})
+	h.Manager.MarkCollecting(id)
+	go func() {
+		snap, err := h.Manager.CollectNow(context.Background(), id)
+		if err != nil {
+			log.Printf("collect[%s]: %v", id, err)
+			return
+		}
+		if err := h.Store.UpsertSnapshot(context.Background(), snap); err != nil {
+			log.Printf("collect[%s]: store: %v", id, err)
+		}
+	}()
+	since := int64(0)
+	if t, ok := h.Manager.CollectingStartedAt(id); ok {
+		since = t.Unix()
+	}
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+		"status": "collecting", "collecting_since": since,
+	})
 }
