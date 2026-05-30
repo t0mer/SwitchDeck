@@ -88,14 +88,14 @@ func ParsePortSettings(js string) ([]models.Port, error) {
 		if i < len(data.FcCfg) {
 			p.FlowControl = data.FcCfg[i] == 1
 		}
-		// Speed is the operator-configured value (spd_cfg), not the actual link speed.
-		// This ensures round-trip writes preserve the setting even when the port has no link.
+		// SpeedConfig is what the operator configured (spd_cfg); used for round-trip writes.
+		// Speed is the actual negotiated link speed (spd_act); used for display.
 		if i < len(data.SpdCfg) {
-			p.Speed = configuredSpeed(data.SpdCfg[i])
+			p.SpeedConfig = configuredSpeed(data.SpdCfg[i])
 		}
-		// Status and duplex reflect actual link state (spd_act).
 		if i < len(data.SpdAct) {
-			_, dpx, status := actualSpeedCode(data.SpdAct[i])
+			spd, dpx, status := actualSpeedCode(data.SpdAct[i])
+			p.Speed = spd
 			p.Duplex = dpx
 			if !p.Enabled {
 				p.Status = models.PortStatusDisabled

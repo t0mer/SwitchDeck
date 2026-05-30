@@ -89,7 +89,7 @@ func (h *Handlers) PatchPort(w http.ResponseWriter, r *http.Request) {
 		for _, p := range snap.Ports {
 			if p.Number == portNum {
 				cfg.Enabled = p.Enabled
-				cfg.Speed = p.Speed
+				cfg.Speed = p.SpeedConfig // configured speed, not actual link speed
 				cfg.FlowControl = p.FlowControl
 				break
 			}

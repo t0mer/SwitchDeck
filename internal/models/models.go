@@ -59,7 +59,8 @@ type Port struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Status      PortStatus `json:"status"`
-	Speed       PortSpeed  `json:"speed"`
+	Speed       PortSpeed  `json:"speed"`        // actual negotiated link speed (display)
+	SpeedConfig PortSpeed  `json:"speed_config"` // operator-configured speed (used for writes)
 	Duplex      DuplexMode `json:"duplex"`
 	FlowControl bool       `json:"flow_control"`
 	Enabled     bool       `json:"enabled"`
