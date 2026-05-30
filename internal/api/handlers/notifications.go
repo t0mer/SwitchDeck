@@ -54,7 +54,11 @@ func (h *Handlers) CreateNotification(w http.ResponseWriter, r *http.Request) {
 		Enabled: req.Enabled, NotifyOffline: req.NotifyOffline, NotifyOnline: req.NotifyOnline,
 	})
 	if err != nil {
-		writeError(w, http.StatusConflict, err.Error())
+		if err == notification.ErrDuplicate {
+			writeError(w, http.StatusConflict, "a channel with that name already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, ch)
@@ -76,6 +80,10 @@ func (h *Handlers) UpdateNotification(w http.ResponseWriter, r *http.Request) {
 		ID: id, Name: req.Name, Provider: req.Provider, Config: req.Config,
 		Enabled: req.Enabled, NotifyOffline: req.NotifyOffline, NotifyOnline: req.NotifyOnline,
 	}); err != nil {
+		if err == notification.ErrNotFound {
+			writeError(w, http.StatusNotFound, "channel not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -86,6 +94,10 @@ func (h *Handlers) UpdateNotification(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteNotification(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := h.NotifStore.Delete(r.Context(), id); err != nil {
+		if err == notification.ErrNotFound {
+			writeError(w, http.StatusNotFound, "channel not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

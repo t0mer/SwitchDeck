@@ -3,12 +3,20 @@ package notification
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/t0mer/SwitchDeck/internal/store"
 )
+
+// ErrDuplicate is returned when a channel name conflicts with an existing one.
+var ErrDuplicate = errors.New("channel name already exists")
+
+// ErrNotFound is returned when no channel exists with the given ID.
+var ErrNotFound = errors.New("channel not found")
 
 // Store persists notification channels.
 type Store struct {
@@ -36,6 +44,9 @@ func (s *Store) Create(ctx context.Context, ch Channel) (*Channel, error) {
 		boolInt(ch.Enabled), boolInt(ch.NotifyOffline), boolInt(ch.NotifyOnline),
 		now, now)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, ErrDuplicate
+		}
 		return nil, fmt.Errorf("create channel: %w", err)
 	}
 	ch.CreatedAt = time.Unix(now, 0)
@@ -76,7 +87,7 @@ func (s *Store) Update(ctx context.Context, ch Channel) error {
 		if err != nil {
 			return err
 		}
-		_, err = s.db.ExecContext(ctx, `
+		result, err := s.db.ExecContext(ctx, `
 			UPDATE notification_channels SET
 				name=?, provider=?, config_enc=?, enabled=?,
 				notify_offline=?, notify_online=?, updated_at=?
@@ -84,9 +95,15 @@ func (s *Store) Update(ctx context.Context, ch Channel) error {
 			ch.Name, ch.Provider, enc,
 			boolInt(ch.Enabled), boolInt(ch.NotifyOffline), boolInt(ch.NotifyOnline),
 			now, ch.ID)
-		return err
+		if err != nil {
+			return err
+		}
+		if n, _ := result.RowsAffected(); n == 0 {
+			return ErrNotFound
+		}
+		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		UPDATE notification_channels SET
 			name=?, provider=?, enabled=?,
 			notify_offline=?, notify_online=?, updated_at=?
@@ -94,12 +111,24 @@ func (s *Store) Update(ctx context.Context, ch Channel) error {
 		ch.Name, ch.Provider,
 		boolInt(ch.Enabled), boolInt(ch.NotifyOffline), boolInt(ch.NotifyOnline),
 		now, ch.ID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM notification_channels WHERE id=?`, id)
-	return err
+	result, err := s.db.ExecContext(ctx, `DELETE FROM notification_channels WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ListEnabled returns channels where enabled=1 and the relevant event flag is set.
@@ -138,7 +167,7 @@ func scanChannel(row scanner, encKey []byte) (*Channel, error) {
 	err := row.Scan(&ch.ID, &ch.Name, &ch.Provider, &enc,
 		&enabled, &offline, &online, &ca, &ua)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("channel not found")
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
