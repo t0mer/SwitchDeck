@@ -2,6 +2,7 @@ package manager_test
 
 import (
 	"context"
+	"net"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -106,6 +107,11 @@ func TestManagerDuplicateAdd(t *testing.T) {
 	mgr.Remove("sw-1")
 }
 
+// newTestWorker creates a worker whose doPing uses overridePort instead of "80".
+func newTestWorker(cfg models.SwitchConfig, overridePort string) *manager.TestWorker {
+	return manager.NewTestWorker(cfg, overridePort)
+}
+
 func TestManagerStatus(t *testing.T) {
 	mc := &mockClient{}
 	cfg := models.SwitchConfig{
@@ -129,4 +135,68 @@ func TestManagerStatus(t *testing.T) {
 		t.Errorf("status after add: got %v, want online", status)
 	}
 	mgr.Remove("sw-1")
+}
+
+func TestPingSuccess(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	cfg := models.SwitchConfig{
+		ID: "ping-ok", IP: host,
+		Username: "u", Password: "p",
+		PollStatsSecs: 60, PollConfigSecs: 300,
+	}
+	w := newTestWorker(cfg, port)
+	ctx := context.Background()
+	w.DoPing(ctx)
+
+	if w.PingIsDown() {
+		t.Error("expected pingIsDown=false after successful probe")
+	}
+}
+
+func TestPingOfflineAfterTwoFailures(t *testing.T) {
+	cfg := models.SwitchConfig{
+		ID: "ping-fail", IP: "127.0.0.1",
+		Username: "u", Password: "p",
+		PollStatsSecs: 60, PollConfigSecs: 300,
+	}
+	w := newTestWorker(cfg, "19999")
+	ctx := context.Background()
+
+	w.DoPing(ctx)
+	if w.PingIsDown() {
+		t.Error("should not be offline after only one failure")
+	}
+	w.DoPing(ctx)
+	if !w.PingIsDown() {
+		t.Error("expected pingIsDown=true after two failures")
+	}
+}
+
+func TestPingRecovery(t *testing.T) {
+	cfg := models.SwitchConfig{
+		ID: "ping-recover", IP: "127.0.0.1",
+		Username: "u", Password: "p",
+		PollStatsSecs: 60, PollConfigSecs: 300,
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	w2 := newTestWorker(cfg, port)
+	manager.SetWorkerOffline(w2)
+
+	ctx := context.Background()
+	w2.DoPing(ctx)
+	if w2.PingIsDown() {
+		t.Error("expected pingIsDown=false after successful probe (recovery)")
+	}
 }
