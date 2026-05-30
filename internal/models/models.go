@@ -229,9 +229,10 @@ type PortConfig struct {
 type SwitchStatus string
 
 const (
-	SwitchStatusOnline  SwitchStatus = "online"
-	SwitchStatusOffline SwitchStatus = "offline"
-	SwitchStatusUnknown SwitchStatus = "unknown"
+	SwitchStatusOnline     SwitchStatus = "online"
+	SwitchStatusOffline    SwitchStatus = "offline"
+	SwitchStatusUnknown    SwitchStatus = "unknown"
+	SwitchStatusCollecting SwitchStatus = "collecting"
 )
 
 // SwitchConfig is the persistent inventory record stored in SQLite.
