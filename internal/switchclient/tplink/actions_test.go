@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
@@ -22,19 +21,14 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*tplink.TPLink, *htt
 }
 
 func TestSetPort(t *testing.T) {
-	var gotPath, gotContentType, gotPortID, gotState, gotSpeed, gotFC string
+	var gotPath, gotMethod, gotPortID, gotState, gotSpeed, gotFC string
 	c, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			gotPath = r.URL.Path
-			gotContentType = r.Header.Get("Content-Type")
-			r.ParseMultipartForm(1 << 20)
-			if r.MultipartForm != nil {
-				gotPortID = r.MultipartForm.Value["portid"][0]
-				gotState = r.MultipartForm.Value["state"][0]
-				gotSpeed = r.MultipartForm.Value["speed"][0]
-				gotFC = r.MultipartForm.Value["flowcontrol"][0]
-			}
-		}
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotPortID = r.URL.Query().Get("portid")
+		gotState = r.URL.Query().Get("state")
+		gotSpeed = r.URL.Query().Get("speed")
+		gotFC = r.URL.Query().Get("flowcontrol")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -47,11 +41,11 @@ func TestSetPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetPort: %v", err)
 	}
+	if gotMethod != http.MethodGet {
+		t.Errorf("method: got %q, want GET", gotMethod)
+	}
 	if gotPath != "/port_setting.cgi" {
 		t.Errorf("path: got %q, want /port_setting.cgi", gotPath)
-	}
-	if !strings.Contains(gotContentType, "multipart/form-data") {
-		t.Errorf("content-type: got %q, want multipart/form-data", gotContentType)
 	}
 	if gotPortID != "3" {
 		t.Errorf("portid: got %q, want 3", gotPortID)
@@ -80,10 +74,12 @@ func TestSetPortInvalidNumber(t *testing.T) {
 }
 
 func TestReboot(t *testing.T) {
-	called := false
+	var gotPath, gotOp string
 	c, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "Reboot") {
-			called = true
+		if r.Method == http.MethodPost {
+			gotPath = r.URL.Path
+			r.ParseForm()
+			gotOp = r.FormValue("reboot_op")
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -92,7 +88,10 @@ func TestReboot(t *testing.T) {
 	if err := c.Reboot(context.Background()); err != nil {
 		t.Fatalf("Reboot: %v", err)
 	}
-	if !called {
-		t.Error("expected reboot POST to be called")
+	if gotPath != "/reboot.cgi" {
+		t.Errorf("path: got %q, want /reboot.cgi", gotPath)
+	}
+	if gotOp != "reboot" {
+		t.Errorf("reboot_op: got %q, want reboot", gotOp)
 	}
 }
