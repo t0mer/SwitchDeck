@@ -13,7 +13,7 @@ type Channel struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Provider      string    `json:"provider"`
-	Config        string    `json:"config"` // decrypted JSON, plaintext in memory only
+	Config        string    `json:"-"` // decrypted JSON, plaintext in memory only — never serialised to API responses
 	Enabled       bool      `json:"enabled"`
 	NotifyOffline bool      `json:"notify_offline"`
 	NotifyOnline  bool      `json:"notify_online"`
