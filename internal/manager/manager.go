@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
 	"github.com/t0mer/SwitchDeck/internal/store"
@@ -15,11 +16,12 @@ type ClientFactory func(insecure bool) switchclient.Client
 
 // Manager orchestrates the collection pool across all registered switches.
 type Manager struct {
-	factory  ClientFactory
-	mu       sync.RWMutex
-	workers  map[string]*worker
-	snapFunc SnapshotFunc
-	errFunc  ErrorFunc
+	factory    ClientFactory
+	mu         sync.RWMutex
+	workers    map[string]*worker
+	collecting sync.Map // string → struct{}: switches currently collecting
+	snapFunc   SnapshotFunc
+	errFunc    ErrorFunc
 }
 
 // New creates a Manager. factory is called when a switch is added.
@@ -111,6 +113,22 @@ func (m *Manager) GetClient(id string) (switchclient.Client, error) {
 	return w.client, nil
 }
 
+// MarkCollecting marks a switch as currently collecting so Status() reflects
+// it immediately — call this before launching a background CollectNow goroutine.
+func (m *Manager) MarkCollecting(id string) {
+	m.collecting.Store(id, time.Now())
+}
+
+// CollectingStartedAt returns the time collection began for a switch, if active.
+func (m *Manager) CollectingStartedAt(id string) (time.Time, bool) {
+	v, ok := m.collecting.Load(id)
+	if !ok {
+		return time.Time{}, false
+	}
+	t, ok := v.(time.Time)
+	return t, ok
+}
+
 // CollectNow performs an immediate full collection for a switch using a fresh
 // authenticated client session independent of the background worker.
 // On success it updates the worker's cached last snapshot.
@@ -121,6 +139,9 @@ func (m *Manager) CollectNow(ctx context.Context, id string) (*models.SwitchSnap
 	if !ok {
 		return nil, fmt.Errorf("switch %s not in pool", id)
 	}
+	m.collecting.Store(id, time.Now())
+	defer m.collecting.Delete(id)
+
 	client := m.factory(w.cfg.InsecureTLS)
 	if err := client.Login(ctx, "http://"+w.cfg.IP, w.cfg.Username, w.cfg.Password); err != nil {
 		return nil, fmt.Errorf("login: %w", err)
@@ -153,6 +174,9 @@ func (m *Manager) LastSnapshot(id string) (*models.SwitchSnapshot, error) {
 
 // Status returns the runtime reachability status of a switch.
 func (m *Manager) Status(id string) models.SwitchStatus {
+	if _, ok := m.collecting.Load(id); ok {
+		return models.SwitchStatusCollecting
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	w, ok := m.workers[id]
