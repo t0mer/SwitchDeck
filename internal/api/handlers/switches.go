@@ -24,19 +24,20 @@ type switchRequest struct {
 }
 
 type switchResponse struct {
-	ID             string              `json:"id"`
-	Name           string              `json:"name"`
-	IP             string              `json:"ip"`
-	Username       string              `json:"username"`
-	InsecureTLS    bool                `json:"insecure_tls"`
-	Enabled        bool                `json:"enabled"`
-	PollStatsSecs  int                 `json:"poll_stats_secs"`
-	PollConfigSecs int                 `json:"poll_config_secs"`
-	Status         models.SwitchStatus `json:"status"`
-	Model          string              `json:"model,omitempty"`
-	PortsTotal     int                 `json:"ports_total"`
-	PortsUp        int                 `json:"ports_up"`
-	PortsDown      int                 `json:"ports_down"`
+	ID              string              `json:"id"`
+	Name            string              `json:"name"`
+	IP              string              `json:"ip"`
+	Username        string              `json:"username"`
+	InsecureTLS     bool                `json:"insecure_tls"`
+	Enabled         bool                `json:"enabled"`
+	PollStatsSecs   int                 `json:"poll_stats_secs"`
+	PollConfigSecs  int                 `json:"poll_config_secs"`
+	Status          models.SwitchStatus `json:"status"`
+	Model           string              `json:"model,omitempty"`
+	PortsTotal      int                 `json:"ports_total"`
+	PortsUp         int                 `json:"ports_up"`
+	PortsDown       int                 `json:"ports_down"`
+	CollectingSince int64               `json:"collecting_since,omitempty"` // unix seconds, non-zero while collecting
 }
 
 func cfgToResponse(cfg models.SwitchConfig, status models.SwitchStatus) switchResponse {
@@ -63,6 +64,9 @@ func (h *Handlers) ListSwitches(w http.ResponseWriter, r *http.Request) {
 	resp := make([]switchResponse, len(cfgs))
 	for i, cfg := range cfgs {
 		resp[i] = cfgToResponse(cfg, h.Manager.Status(cfg.ID))
+		if t, ok := h.Manager.CollectingStartedAt(cfg.ID); ok {
+			resp[i].CollectingSince = t.Unix()
+		}
 		if snap, err := h.Store.LatestSnapshot(r.Context(), cfg.ID); err == nil {
 			resp[i].Model = snap.Switch.Model
 			for _, p := range snap.Ports {
@@ -128,7 +132,11 @@ func (h *Handlers) AddSwitch(w http.ResponseWriter, r *http.Request) {
 			log.Printf("auto-collect[%s]: store: %v", cfg.ID, err)
 		}
 	}()
-	writeJSON(w, http.StatusCreated, cfgToResponse(cfg, models.SwitchStatusCollecting))
+	r2 := cfgToResponse(cfg, models.SwitchStatusCollecting)
+	if t, ok := h.Manager.CollectingStartedAt(cfg.ID); ok {
+		r2.CollectingSince = t.Unix()
+	}
+	writeJSON(w, http.StatusCreated, r2)
 }
 
 // GetSwitch handles GET /api/v1/switches/{id}.
