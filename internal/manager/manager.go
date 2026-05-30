@@ -183,6 +183,9 @@ func (m *Manager) Status(id string) models.SwitchStatus {
 	if !ok {
 		return models.SwitchStatusUnknown
 	}
+	if w.pingIsDown() {
+		return models.SwitchStatusOffline
+	}
 	if w.lastSnapshot() != nil {
 		return models.SwitchStatusOnline
 	}

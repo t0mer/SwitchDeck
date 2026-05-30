@@ -39,3 +39,16 @@ func SetWorkerOffline(tw *TestWorker) {
 	tw.pingDown = true
 	tw.pingMu.Unlock()
 }
+
+// DriveWorkerOffline forces the named worker's ping state to offline
+// for testing Manager.Status().
+func DriveWorkerOffline(m *Manager, id string) {
+	m.mu.RLock()
+	w, ok := m.workers[id]
+	m.mu.RUnlock()
+	if !ok {
+		return
+	}
+	tw := &TestWorker{w}
+	SetWorkerOffline(tw)
+}

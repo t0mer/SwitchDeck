@@ -200,3 +200,23 @@ func TestPingRecovery(t *testing.T) {
 		t.Error("expected pingIsDown=false after successful probe (recovery)")
 	}
 }
+
+func TestManagerStatusOfflineWhenPingFails(t *testing.T) {
+	mc := &mockClient{}
+	cfg := models.SwitchConfig{
+		ID: "sw-ping", IP: "127.0.0.1",
+		Username: "admin", Password: "pass", Enabled: true,
+		PollStatsSecs: 60, PollConfigSecs: 300,
+	}
+	clientFactory := func(_ bool) switchclient.Client { return mc }
+	mgr := manager.New(clientFactory)
+	mgr.Add(cfg)
+	time.Sleep(300 * time.Millisecond)
+
+	manager.DriveWorkerOffline(mgr, "sw-ping")
+
+	if status := mgr.Status("sw-ping"); status != models.SwitchStatusOffline {
+		t.Errorf("expected offline, got %v", status)
+	}
+	mgr.Remove("sw-ping")
+}
