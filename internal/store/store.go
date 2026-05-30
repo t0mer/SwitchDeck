@@ -27,6 +27,7 @@ type Store interface {
 	GetSetting(ctx context.Context, key string) (string, error)
 	SetSetting(ctx context.Context, key, value string) error
 	Close() error
+	DB() *sql.DB
 }
 
 // SQLiteStore is the SQLite-backed Store implementation.
@@ -73,6 +74,9 @@ func (s *SQLiteStore) EncryptionKey() ([]byte, error) {
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
+
+// DB returns the underlying *sql.DB for use by sub-packages.
+func (s *SQLiteStore) DB() *sql.DB { return s.db }
 
 func (s *SQLiteStore) GetSetting(ctx context.Context, key string) (string, error) {
 	var val string

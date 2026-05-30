@@ -12,6 +12,7 @@ import (
 	"github.com/t0mer/SwitchDeck/internal/config"
 	"github.com/t0mer/SwitchDeck/internal/manager"
 	"github.com/t0mer/SwitchDeck/internal/models"
+	"github.com/t0mer/SwitchDeck/internal/notification"
 	"github.com/t0mer/SwitchDeck/internal/server"
 	"github.com/t0mer/SwitchDeck/internal/store"
 	"github.com/t0mer/SwitchDeck/internal/switchclient"
@@ -51,6 +52,9 @@ func main() {
 		log.Fatalf("encryption key: %v", err)
 	}
 
+	notifStore := notification.NewStore(st.DB(), encKey)
+	notifSvc := notification.NewService(notifStore)
+
 	clientFactory := func(insecure bool) switchclient.Client {
 		return tplink.New(insecure)
 	}
@@ -59,12 +63,13 @@ func main() {
 	mgr.SetSnapshotHandler(func(snap *models.SwitchSnapshot, _ bool) {
 		st.UpsertSnapshot(context.Background(), snap)
 	})
+	mgr.SetNotificationService(notifSvc)
 
 	if err := mgr.LoadFromStore(context.Background(), st, encKey); err != nil {
 		log.Fatalf("load switches: %v", err)
 	}
 
-	h := handlers.New(mgr, st, encKey)
+	h := handlers.New(mgr, st, encKey, notifStore)
 	srv := server.New(cfg, h, st)
 
 	log.Printf("SwitchDeck %s listening on :%d", version, cfg.Port)

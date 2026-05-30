@@ -49,7 +49,7 @@ func setupHandlers(t *testing.T) *handlers.Handlers {
 	t.Cleanup(func() { st.Close() })
 	key, _ := st.EncryptionKey()
 	mgr := manager.New(noopFactory)
-	return handlers.New(mgr, st, key)
+	return handlers.New(mgr, st, key, nil)
 }
 
 func TestListSwitches_empty(t *testing.T) {
