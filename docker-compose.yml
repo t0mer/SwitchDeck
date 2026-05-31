@@ -1,0 +1,14 @@
+services:
+  switchdeck:
+    image: techblog/switchdeck:latest
+    container_name: switchdeck
+    ports:
+      - "8080:8080"
+    volumes:
+      - switchdeck-data:/data/switchdeck
+    environment:
+      LOG_LEVEL: info
+    restart: unless-stopped
+
+volumes:
+  switchdeck-data:
