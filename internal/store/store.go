@@ -42,6 +42,10 @@ type Store interface {
 	ListApiTokens(ctx context.Context) ([]ApiToken, error)
 	DeleteApiToken(ctx context.Context, id string) error
 	MatchApiToken(ctx context.Context, plaintext string) (*ApiToken, error)
+	// Port name overrides (user-defined display labels stored in SwitchDeck, not on the switch)
+	SetPortName(ctx context.Context, switchID string, port int, name string) error
+	DeletePortName(ctx context.Context, switchID string, port int) error
+	ListPortNames(ctx context.Context, switchID string) (map[int]string, error)
 	Close() error
 	DB() *sql.DB
 }
@@ -305,4 +309,41 @@ func (s *SQLiteStore) MatchApiToken(ctx context.Context, plaintext string) (*Api
 		return nil, fmt.Errorf("token expired")
 	}
 	return &t, nil
+}
+
+// SetPortName upserts a user-defined display name for a specific port.
+func (s *SQLiteStore) SetPortName(ctx context.Context, switchID string, port int, name string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO port_names(switch_id, port, name) VALUES(?,?,?)
+		 ON CONFLICT(switch_id, port) DO UPDATE SET name=excluded.name`,
+		switchID, port, name)
+	return err
+}
+
+// DeletePortName removes a user-defined port name, reverting to the default "Port N".
+func (s *SQLiteStore) DeletePortName(ctx context.Context, switchID string, port int) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM port_names WHERE switch_id=? AND port=?`, switchID, port)
+	return err
+}
+
+// ListPortNames returns all user-defined port names for a switch as a map of
+// port number → name. Ports without a custom name are not included.
+func (s *SQLiteStore) ListPortNames(ctx context.Context, switchID string) (map[int]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT port, name FROM port_names WHERE switch_id=? ORDER BY port`, switchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int]string)
+	for rows.Next() {
+		var port int
+		var name string
+		if err := rows.Scan(&port, &name); err != nil {
+			return nil, err
+		}
+		out[port] = name
+	}
+	return out, rows.Err()
 }

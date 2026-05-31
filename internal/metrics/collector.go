@@ -4,6 +4,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -37,7 +38,8 @@ type SwitchCollector struct {
 	switchPortsDown     *prometheus.Desc
 	switchLastCollected *prometheus.Desc
 
-	// port state
+	// port info / state
+	portInfo      *prometheus.Desc // carries port_name label
 	portUp        *prometheus.Desc
 	portEnabled   *prometheus.Desc
 	portSpeedMbps *prometheus.Desc
@@ -106,6 +108,11 @@ func NewSwitchCollector(mgr *manager.Manager, st store.Store, encKey []byte) *Sw
 		switchPortsDown:     d("switch_ports_down", "Number of ports with link down.", swLabels),
 		switchLastCollected: d("switch_last_collected_timestamp_seconds", "Unix timestamp of the last successful data collection.", swLabels),
 
+		portInfo: prometheus.NewDesc(
+			prometheus.BuildFQName(ns, "", "port_info"),
+			"Port metadata. Value is always 1.",
+			[]string{"switch_id", "switch_name", "port", "port_name"}, nil,
+		),
 		portUp:        d("port_up", "1 if port link is up, 0 otherwise.", portLabels),
 		portEnabled:   d("port_enabled", "1 if port is administratively enabled.", portLabels),
 		portSpeedMbps: d("port_speed_mbps", "Negotiated port speed in Mbps (0 if link is down).", portLabels),
@@ -157,7 +164,7 @@ func (c *SwitchCollector) allDescs() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		c.switchInfo, c.switchUp, c.switchCollecting,
 		c.switchPortsTotal, c.switchPortsUp, c.switchPortsDown, c.switchLastCollected,
-		c.portUp, c.portEnabled, c.portSpeedMbps,
+		c.portInfo, c.portUp, c.portEnabled, c.portSpeedMbps,
 		c.portRxBytes, c.portTxBytes, c.portRxPackets, c.portTxPackets,
 		c.portRxErrors, c.portTxErrors, c.portRxDropped, c.portTxDropped,
 		c.poeBudgetWatts, c.poeConsumedWatts, c.poePortEnabled, c.poePortWatts,
@@ -245,8 +252,13 @@ func (c *SwitchCollector) emitSwitch(ch chan<- prometheus.Metric, r scrapeResult
 	}
 
 	// ── per-port state ────────────────────────────────────────────────────
+	// Load user-defined port names; fall back to "Port N" when not set.
+	portNames, _ := c.st.ListPortNames(context.Background(), id)
 	for _, p := range snap.Ports {
 		port := strconv.Itoa(p.Number)
+		pname := portDisplayName(portNames, p.Number)
+		ch <- prometheus.MustNewConstMetric(c.portInfo, prometheus.GaugeValue, 1,
+			id, name, port, pname)
 		ch <- gb(c.portUp, p.Status == models.PortStatusUp, id, name, port)
 		ch <- gb(c.portEnabled, p.Enabled, id, name, port)
 		ch <- g(c.portSpeedMbps, speedMbps(p.Speed), id, name, port)
@@ -343,6 +355,16 @@ func gb(desc *prometheus.Desc, b bool, labels ...string) prometheus.Metric {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────
+
+// portDisplayName returns the custom name for a port, or "Port N" if none is set.
+func portDisplayName(names map[int]string, portNum int) string {
+	if names != nil {
+		if n, ok := names[portNum]; ok && n != "" {
+			return n
+		}
+	}
+	return fmt.Sprintf("Port %d", portNum)
+}
 
 func speedMbps(s models.PortSpeed) float64 {
 	switch s {
