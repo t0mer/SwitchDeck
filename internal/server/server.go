@@ -96,6 +96,9 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		r.Post("/notifications/test", h.TestNotification)
 		r.Put("/notifications/{id}", h.UpdateNotification)
 		r.Delete("/notifications/{id}", h.DeleteNotification)
+
+		r.Get("/backup", h.ExportBackup)
+		r.Post("/backup/restore", h.RestoreBackup)
 	})
 
 	return &Server{cfg: cfg, router: r}
