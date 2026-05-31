@@ -46,6 +46,7 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		r.Get("/", ui.Dashboard)
 		r.Get("/switches/{id}", ui.SwitchDetail)
 		r.Get("/settings", ui.Settings)
+		r.Get("/notifications", ui.Notifications)
 	})
 
 	// ── API routes (401 JSON on auth failure) ──────────────────────────────

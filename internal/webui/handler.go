@@ -61,6 +61,11 @@ func (h *UIHandler) Settings(w http.ResponseWriter, r *http.Request) {
 	h.renderPage(w, "settings.html", nil)
 }
 
+// Notifications handles GET /notifications.
+func (h *UIHandler) Notifications(w http.ResponseWriter, r *http.Request) {
+	h.renderPage(w, "notifications.html", nil)
+}
+
 // Login handles GET /login — standalone page, no sidebar layout.
 func (h *UIHandler) Login(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFS(h.tmplFS, "login.html")
