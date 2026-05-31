@@ -18,3 +18,35 @@ Built in Go with an embedded web UI — a single binary, no external dependencie
 - **Dark / light mode** — system-preference-aware toggle; preference persisted in `localStorage`
 - **Responsive layout** — collapsible sidebar on desktop; fixed bottom tab bar on mobile
 - **Docker-ready** — multi-arch image (`amd64`, `arm64`, `armv7`) published to Docker Hub
+
+## Screenshots
+
+### Dashboard — Dark Mode
+![Dashboard dark](assets/screenshots/dashboard-dark.png)
+
+### Dashboard — Light Mode
+![Dashboard light](assets/screenshots/dashboard-light.png)
+
+### Switch Detail — Ports
+![Switch ports](assets/screenshots/switch-detail-ports.png)
+
+### Switch Detail — Statistics
+![Switch statistics](assets/screenshots/switch-detail-stats.png)
+
+### Switch Detail — System Info
+![Switch system](assets/screenshots/switch-detail-system.png)
+
+### Add Switch
+![Add switch modal](assets/screenshots/add-switch-modal.png)
+
+### Notifications
+![Notifications page](assets/screenshots/notifications.png)
+
+### Add Notification Channel
+![Add channel modal](assets/screenshots/add-channel-modal.png)
+
+### Settings
+![Settings page](assets/screenshots/settings.png)
+
+### Login
+![Login page](assets/screenshots/login.png)
