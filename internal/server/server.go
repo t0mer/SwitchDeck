@@ -70,6 +70,8 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 
 		r.Get("/switches/{id}/snapshot", h.GetSnapshot)
 		r.Get("/switches/{id}/ports", h.GetPorts)
+		r.Get("/switches/{id}/port-names", h.ListPortNames)
+		r.Put("/switches/{id}/port-names/{port}", h.SetPortName)
 		r.Get("/switches/{id}/stats", h.GetStats)
 		r.Get("/switches/{id}/vlans", h.GetVLANs)
 		r.Get("/switches/{id}/lag", h.GetLAG)
