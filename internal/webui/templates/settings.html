@@ -7,33 +7,91 @@
 </div>
 
 <div class="page-content">
-  <form id="settings-form" style="max-width:600px">
-    <div class="settings-section">
-      <div class="settings-section-header">Authentication</div>
-      <div class="settings-section-body">
-        <div class="form-group">
-          <label class="toggle-wrap">
-            <label class="toggle">
-              <input id="s-auth-enabled" type="checkbox">
-              <span class="toggle-track"></span>
-            </label>
-            Require API token for all requests
+  <div style="display:flex;justify-content:flex-end;margin-bottom:16px" id="logout-row" class="hidden">
+    <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Sign out</button>
+  </div>
+
+  <!-- Authentication toggle -->
+  <div class="settings-section" style="max-width:600px">
+    <div class="settings-section-header">Authentication</div>
+    <div class="settings-section-body">
+      <div class="form-group">
+        <label class="toggle-wrap">
+          <label class="toggle">
+            <input id="s-auth-enabled" type="checkbox">
+            <span class="toggle-track"></span>
           </label>
-          <div class="form-hint">When enabled, all API and UI requests must include the token via <code>X-API-Token</code> header.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="s-auth-token">API Token</label>
-          <div class="flex gap-2">
-            <input id="s-auth-token" class="form-control" type="password" placeholder="Enter or generate a token">
-            <button type="button" class="btn btn-secondary" id="btn-gen-token">Generate</button>
-          </div>
-        </div>
+          Require login to access SwitchDeck
+        </label>
+        <div class="form-hint">Protects both the web UI (login page) and the API. Set credentials below before enabling.</div>
       </div>
     </div>
+  </div>
 
-    <button type="submit" class="btn btn-primary">Save Settings</button>
-  </form>
+  <!-- Web Access -->
+  <div class="settings-section" style="max-width:600px;margin-top:16px">
+    <div class="settings-section-header">Web Access — Username &amp; Password</div>
+    <div class="settings-section-body">
+      <form id="credentials-form">
+        <div class="form-group">
+          <label class="form-label" for="s-username">Username</label>
+          <input id="s-username" class="form-control" type="text" placeholder="admin" autocomplete="username">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="s-password">New Password</label>
+            <input id="s-password" class="form-control" type="password" placeholder="Min. 8 characters" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="s-password2">Confirm Password</label>
+            <input id="s-password2" class="form-control" type="password" placeholder="Repeat password" autocomplete="new-password">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save Credentials</button>
+      </form>
+    </div>
+  </div>
 
+  <!-- API Token -->
+  <div class="settings-section" style="max-width:600px;margin-top:16px">
+    <div class="settings-section-header">API Token — External Access</div>
+    <div class="settings-section-body">
+      <div class="form-group">
+        <label class="form-label">Token</label>
+        <div class="flex gap-2" style="align-items:center">
+          <input id="s-token-display" class="form-control text-mono" type="password" readonly placeholder="No token set — click Rotate to generate" style="flex:1">
+          <button type="button" class="btn btn-secondary btn-sm btn-icon" id="btn-token-show" title="Show / Copy token">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <div class="form-hint" id="s-token-hint"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="s-token-expiry">Expiry</label>
+          <select id="s-token-expiry" class="form-control">
+            <option value="0">Never</option>
+            <option value="86400">24 hours</option>
+            <option value="604800">7 days</option>
+            <option value="2592000">30 days</option>
+            <option value="custom">Custom date…</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="s-token-custom-wrap">
+          <label class="form-label" for="s-token-custom">Custom date</label>
+          <input id="s-token-custom" class="form-control" type="datetime-local">
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-save-token-expiry">Save Expiry</button>
+        <button type="button" class="btn btn-danger btn-sm" id="btn-rotate-token">Rotate Token…</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications section stays below (keep existing) -->
   <!-- Notifications section -->
   <div class="settings-section" style="max-width:700px;margin-top:24px">
     <div class="settings-section-header" style="display:flex;align-items:center;justify-content:space-between">
