@@ -7,10 +7,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/t0mer/SwitchDeck/internal/api/handlers"
 	mw "github.com/t0mer/SwitchDeck/internal/api/middleware"
 	"github.com/t0mer/SwitchDeck/internal/config"
+	"github.com/t0mer/SwitchDeck/internal/metrics"
 	"github.com/t0mer/SwitchDeck/internal/store"
 	"github.com/t0mer/SwitchDeck/internal/webui"
 )
@@ -31,6 +34,14 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 	if err != nil {
 		log.Fatalf("webui: %v", err)
 	}
+
+	// ── Prometheus metrics ─────────────────────────────────────────────────
+	// Each scrape triggers a live collection from all enabled switches.
+	// Protected by the same AuthAPI middleware as the REST API so that
+	// network topology data is not exposed without credentials.
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(metrics.NewSwitchCollector(h.Manager, h.Store, h.EncKey))
+	metricsHandler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 
 	// ── Always public ───────────────────────────────────────────────────────
 	r.Get("/static/*", ui.ServeStatic)
@@ -88,6 +99,10 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		r.Post("/notifications/test", h.TestNotification)
 		r.Put("/notifications/{id}", h.UpdateNotification)
 		r.Delete("/notifications/{id}", h.DeleteNotification)
+
+		r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			metricsHandler.ServeHTTP(w, r)
+		})
 	})
 
 	return &Server{cfg: cfg, router: r}
