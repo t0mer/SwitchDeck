@@ -104,22 +104,6 @@ function setActiveNav() {
 }
 setActiveNav();
 
-// ── Mobile sidebar ────────────────────────────────────────────────────────
-
-const sidebar     = document.getElementById('sidebar');
-const sidebarOverlay = document.getElementById('sidebar-overlay');
-const sidebarToggle  = document.getElementById('sidebar-toggle');
-
-function openSidebar() {
-  sidebar?.classList.add('open');
-  sidebarOverlay?.classList.add('active');
-}
-function closeSidebar() {
-  sidebar?.classList.remove('open');
-  sidebarOverlay?.classList.remove('active');
-}
-sidebarToggle?.addEventListener('click', openSidebar);
-sidebarOverlay?.addEventListener('click', closeSidebar);
 
 // ── Format helpers ────────────────────────────────────────────────────────
 
