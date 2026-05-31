@@ -81,6 +81,11 @@
 
 <script>
 (function() {
+  // If auth is disabled, skip the login page entirely.
+  fetch('/api/v1/auth/session').then(function(r){ return r.json(); }).then(function(d){
+    if (!d.auth_enabled) window.location.replace('/');
+  }).catch(function(){});
+
   var form   = document.getElementById('login-form');
   var errEl  = document.getElementById('login-error');
   // Use the URL API to validate the redirect target — string prefix checks are
