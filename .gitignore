@@ -6,7 +6,7 @@ CLAUDE.md
 .aider*
 
 # Design / implementation / planning docs — local only
-docs/*
+/docs/
 
 # Build output
 /dist/
