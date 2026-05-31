@@ -1,5 +1,20 @@
 'use strict';
 
+// ── Theme ─────────────────────────────────────────────────────────────────
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('sd-theme', theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+document.getElementById('mob-theme-toggle')?.addEventListener('click', toggleTheme);
+
 // ── API helpers ────────────────────────────────────────────────────────────
 
 async function api(method, path, body) {
