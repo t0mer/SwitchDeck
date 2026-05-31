@@ -45,4 +45,11 @@ CREATE TABLE IF NOT EXISTS notification_channels (
 	created_at     INTEGER NOT NULL,
 	updated_at     INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS port_names (
+	switch_id TEXT    NOT NULL REFERENCES switches(id) ON DELETE CASCADE,
+	port      INTEGER NOT NULL,
+	name      TEXT    NOT NULL,
+	PRIMARY KEY (switch_id, port)
+);
 `
