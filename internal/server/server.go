@@ -7,10 +7,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/t0mer/SwitchDeck/internal/api/handlers"
 	mw "github.com/t0mer/SwitchDeck/internal/api/middleware"
 	"github.com/t0mer/SwitchDeck/internal/config"
+	"github.com/t0mer/SwitchDeck/internal/metrics"
 	"github.com/t0mer/SwitchDeck/internal/store"
 	"github.com/t0mer/SwitchDeck/internal/webui"
 )
@@ -39,6 +42,11 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 	r.Post("/api/v1/auth/login", h.Login)
 	r.Post("/api/v1/auth/logout", h.Logout)
 	r.Get("/api/v1/auth/session", h.Session)
+
+	// /metrics is always public — Prometheus scrapers must not need credentials.
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(metrics.NewSwitchCollector(h.Manager, h.Store, h.EncKey))
+	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
 
 	// ── UI routes (redirect to /login on auth failure) ─────────────────────
 	r.Group(func(r chi.Router) {
