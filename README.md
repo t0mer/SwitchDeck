@@ -50,6 +50,9 @@ Built in Go with an embedded web UI — a single binary, no external dependencie
 ### Settings
 ![Settings page](assets/screenshots/settings.png)
 
+### Backup & Restore
+![Backup and restore](assets/screenshots/settings-backup.png)
+
 ### Login
 ![Login page](assets/screenshots/login.png)
 
