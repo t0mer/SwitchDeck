@@ -78,7 +78,9 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 
 		r.Get("/settings", h.GetSettings)
 		r.Put("/settings", h.UpdateSettings)
-		r.Post("/settings/rotate-token", h.RotateToken)
+		r.Get("/settings/tokens", h.ListTokens)
+		r.Post("/settings/tokens", h.CreateToken)
+		r.Delete("/settings/tokens/{id}", h.DeleteToken)
 
 		r.Get("/notifications", h.ListNotifications)
 		r.Post("/notifications", h.CreateNotification)

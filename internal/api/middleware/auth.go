@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -124,18 +123,8 @@ func validateRequest(r *http.Request, st store.Store) bool {
 	if presented == "" {
 		return false
 	}
-	token, _ := st.GetSetting(r.Context(), "auth_token")
-	if token == "" || !safeEqual(presented, token) {
-		return false
-	}
-	expiryStr, _ := st.GetSetting(r.Context(), "auth_token_expiry")
-	if expiryStr != "" && expiryStr != "0" {
-		expiry, err := strconv.ParseInt(expiryStr, 10, 64)
-		if err == nil && time.Now().Unix() > expiry {
-			return false
-		}
-	}
-	return true
+	_, err := st.MatchApiToken(r.Context(), presented)
+	return err == nil
 }
 
 func sessionSecret(ctx context.Context, st store.Store) ([]byte, error) {
