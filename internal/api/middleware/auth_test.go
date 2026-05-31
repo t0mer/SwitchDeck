@@ -2,7 +2,6 @@ package middleware_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,7 +54,10 @@ func TestAuthAPI_bearerToken(t *testing.T) {
 	ctx := context.Background()
 	st.SetSetting(ctx, "auth_enabled", "true")
 	st.SetSetting(ctx, "auth_username", "admin")
-	st.SetSetting(ctx, "auth_token", "secret-token")
+	// Create a token in the api_tokens table
+	if _, err := st.CreateApiToken(ctx, "test", "secret-token", 0); err != nil {
+		t.Fatalf("CreateApiToken: %v", err)
+	}
 
 	h := middleware.AuthAPI(st)(okHandler())
 
@@ -81,9 +83,10 @@ func TestAuthAPI_tokenExpiry(t *testing.T) {
 	ctx := context.Background()
 	st.SetSetting(ctx, "auth_enabled", "true")
 	st.SetSetting(ctx, "auth_username", "admin")
-	st.SetSetting(ctx, "auth_token", "tok")
 	past := time.Now().Add(-time.Hour).Unix()
-	st.SetSetting(ctx, "auth_token_expiry", fmt.Sprintf("%d", past))
+	if _, err := st.CreateApiToken(ctx, "expired", "tok", past); err != nil {
+		t.Fatalf("CreateApiToken: %v", err)
+	}
 
 	h := middleware.AuthAPI(st)(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

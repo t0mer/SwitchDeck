@@ -817,24 +817,7 @@ async function initSettings() {
     const s = await apiGet('/settings');
     const authEl = document.getElementById('s-auth-enabled');
     if (authEl) authEl.checked = s.auth_enabled;
-    updateTokenHint(s.token_set, s.token_expiry);
-    if (s.token_expiry && s.token_expiry > 0) {
-      const known = ['86400', '604800', '2592000'];
-      const diff = s.token_expiry - Math.floor(Date.now() / 1000);
-      const found = known.find(v => Math.abs(diff - parseInt(v)) < 300);
-      const sel = document.getElementById('s-token-expiry');
-      if (sel) {
-        if (found) {
-          sel.value = found;
-        } else {
-          sel.value = 'custom';
-          document.getElementById('s-token-custom-wrap')?.classList.remove('hidden');
-          const d = new Date(s.token_expiry * 1000);
-          const inp = document.getElementById('s-token-custom');
-          if (inp) inp.value = d.toISOString().slice(0, 16);
-        }
-      }
-    }
+    await loadTokenList();
     const sess = await apiGet('/auth/session').catch(() => null);
     if (sess?.authenticated) {
       document.getElementById('logout-row')?.classList.remove('hidden');
@@ -844,12 +827,147 @@ async function initSettings() {
   }
 }
 
-function updateTokenHint(tokenSet, expiry) {
-  const hint = document.getElementById('s-token-hint');
-  if (!hint) return;
-  if (!tokenSet) { hint.textContent = 'No token set. Click Rotate Token to generate one.'; return; }
-  if (!expiry || expiry === 0) { hint.textContent = 'Token is set. Expiry: never.'; return; }
-  hint.textContent = 'Token expires: ' + new Date(expiry * 1000).toLocaleString();
+// ── API Token list ─────────────────────────────────────────────────────────
+
+async function loadTokenList() {
+  const wrap = document.getElementById('token-list-wrap');
+  if (!wrap) return;
+  try {
+    const tokens = await apiGet('/settings/tokens');
+    renderTokenList(wrap, tokens || []);
+  } catch (e) {
+    wrap.textContent = '';
+    const err = el('p', 'text-muted', 'Failed to load tokens: ' + e.message);
+    err.style.padding = '12px';
+    wrap.appendChild(err);
+  }
+}
+
+function renderTokenList(wrap, tokens) {
+  wrap.textContent = '';
+  if (!tokens.length) {
+    const empty = el('p', 'text-muted', 'No tokens yet. Add one to allow external API access.');
+    empty.style.padding = '16px';
+    wrap.appendChild(empty);
+    return;
+  }
+  const table = el('table');
+  const thead = el('thead');
+  const hr = el('tr');
+  for (const h of ['Name', 'Expiry', 'Created', '']) hr.appendChild(el('th', null, h));
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody = el('tbody');
+  for (const t of tokens) {
+    const row = el('tr');
+    row.appendChild(el('td', 'font-bold', t.name));
+    row.appendChild(el('td', 'text-mono text-sm',
+      t.expiry ? new Date(t.expiry * 1000).toLocaleDateString() : 'Never'));
+    row.appendChild(el('td', 'text-sm text-muted',
+      new Date(t.created_at).toLocaleDateString()));
+    const act = el('td');
+    const del = el('button', 'btn btn-danger btn-sm', 'Revoke');
+    del.addEventListener('click', () => revokeToken(t.id, t.name));
+    act.appendChild(del);
+    row.appendChild(act);
+    tbody.appendChild(row);
+  }
+  table.appendChild(tbody);
+  const wrapper = el('div', 'table-wrapper');
+  wrapper.appendChild(table);
+  wrap.appendChild(wrapper);
+}
+
+async function revokeToken(id, name) {
+  if (!confirm(`Revoke token "${name}"? Any API clients using it will stop working.`)) return;
+  try {
+    await apiDel(`/settings/tokens/${id}`);
+    toast('Token revoked');
+    await loadTokenList();
+  } catch (e) {
+    toast(e.message, 'danger');
+  }
+}
+
+// ── Add token modal ────────────────────────────────────────────────────────
+
+document.getElementById('btn-add-token')?.addEventListener('click', openAddTokenModal);
+document.getElementById('btn-close-token-modal')?.addEventListener('click', closeTokenModal);
+document.getElementById('btn-cancel-token-modal')?.addEventListener('click', closeTokenModal);
+document.getElementById('token-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeTokenModal();
+});
+
+document.getElementById('t-expiry')?.addEventListener('change', function () {
+  document.getElementById('t-expiry-custom-wrap')?.classList.toggle('hidden', this.value !== 'custom');
+});
+
+function openAddTokenModal() {
+  document.getElementById('token-create-form-wrap')?.classList.remove('hidden');
+  document.getElementById('token-reveal-wrap')?.classList.add('hidden');
+  document.getElementById('t-name').value = '';
+  document.getElementById('t-expiry').value = '0';
+  document.getElementById('t-expiry-custom-wrap')?.classList.add('hidden');
+  const footer = document.getElementById('token-modal-footer');
+  if (footer) {
+    footer.textContent = '';
+    const cancelBtn = el('button', 'btn btn-secondary', 'Cancel');
+    cancelBtn.type = 'button';
+    const createBtn = el('button', 'btn btn-primary', 'Create Token');
+    createBtn.type = 'button';
+    cancelBtn.addEventListener('click', closeTokenModal);
+    createBtn.addEventListener('click', doCreateToken);
+    append(footer, cancelBtn, createBtn);
+  }
+  document.getElementById('token-modal-backdrop')?.classList.remove('hidden');
+}
+
+function closeTokenModal() {
+  document.getElementById('token-modal-backdrop')?.classList.add('hidden');
+}
+
+async function doCreateToken() {
+  const name = document.getElementById('t-name').value.trim();
+  if (!name) { toast('Token name is required', 'danger'); return; }
+  const sel = document.getElementById('t-expiry').value;
+  let expiry = 0;
+  if (sel === 'custom') {
+    const val = document.getElementById('t-expiry-custom').value;
+    if (!val) { toast('Pick a custom date', 'danger'); return; }
+    expiry = Math.floor(new Date(val).getTime() / 1000);
+  } else {
+    const secs = parseInt(sel) || 0;
+    expiry = secs > 0 ? Math.floor(Date.now() / 1000) + secs : 0;
+  }
+  const btn = document.getElementById('btn-create-token');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await apiPost('/settings/tokens', { name, expiry });
+    // Show reveal phase
+    document.getElementById('token-create-form-wrap')?.classList.add('hidden');
+    document.getElementById('token-reveal-wrap')?.classList.remove('hidden');
+    const field = document.getElementById('t-reveal');
+    if (field) field.value = res.token;
+    await navigator.clipboard.writeText(res.token).catch(() => {});
+    const footer = document.getElementById('token-modal-footer');
+    if (footer) {
+      footer.textContent = '';
+      const doneBtn = el('button', 'btn btn-primary', "Done — I've saved it");
+      doneBtn.type = 'button';
+      doneBtn.addEventListener('click', async () => {
+        closeTokenModal();
+        await loadTokenList();
+      });
+      footer.appendChild(doneBtn);
+    }
+    document.getElementById('btn-copy-token')?.addEventListener('click', async () => {
+      const f = document.getElementById('t-reveal');
+      await navigator.clipboard.writeText(f.value).catch(() => {});
+      toast('Copied!');
+    });
+  } catch (e) {
+    toast(e.message, 'danger');
+    if (btn) btn.disabled = false;
+  }
 }
 
 document.getElementById('s-auth-enabled')?.addEventListener('change', async function () {
@@ -881,58 +999,6 @@ document.getElementById('credentials-form')?.addEventListener('submit', async e 
     toast(err.message, 'danger');
   } finally {
     btn.disabled = false;
-  }
-});
-
-document.getElementById('btn-token-show')?.addEventListener('click', async function () {
-  const field = document.getElementById('s-token-display');
-  if (field.type === 'password') {
-    field.type = 'text';
-    if (field.value && field.value !== '••••••••') {
-      await navigator.clipboard.writeText(field.value).catch(() => {});
-      toast('Token copied to clipboard');
-    }
-  } else {
-    field.type = 'password';
-  }
-});
-
-document.getElementById('s-token-expiry')?.addEventListener('change', function () {
-  document.getElementById('s-token-custom-wrap')?.classList.toggle('hidden', this.value !== 'custom');
-});
-
-document.getElementById('btn-save-token-expiry')?.addEventListener('click', async () => {
-  const sel = document.getElementById('s-token-expiry').value;
-  let expiry = 0;
-  if (sel === 'custom') {
-    const val = document.getElementById('s-token-custom').value;
-    if (!val) { toast('Pick a custom date', 'danger'); return; }
-    expiry = Math.floor(new Date(val).getTime() / 1000);
-  } else {
-    const secs = parseInt(sel) || 0;
-    expiry = secs > 0 ? Math.floor(Date.now() / 1000) + secs : 0;
-  }
-  try {
-    await apiPut('/settings', { token_expiry: expiry });
-    toast('Expiry saved');
-    updateTokenHint(true, expiry);
-  } catch (e) {
-    toast(e.message, 'danger');
-  }
-});
-
-document.getElementById('btn-rotate-token')?.addEventListener('click', async () => {
-  if (!confirm('Rotate the API token? The current token will stop working immediately.')) return;
-  try {
-    const res = await apiPost('/settings/rotate-token', {});
-    const field = document.getElementById('s-token-display');
-    field.value = res.token;
-    field.type = 'text';
-    await navigator.clipboard.writeText(res.token).catch(() => {});
-    toast("New token generated and copied. Save it — it won't be shown again.");
-    updateTokenHint(true, null);
-  } catch (e) {
-    toast(e.message, 'danger');
   }
 });
 

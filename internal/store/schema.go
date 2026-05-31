@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS settings (
 	value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS api_tokens (
+	id         TEXT PRIMARY KEY,
+	name       TEXT NOT NULL,
+	token_hash TEXT NOT NULL UNIQUE,
+	expiry     INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS notification_channels (
 	id             TEXT PRIMARY KEY,
 	name           TEXT NOT NULL UNIQUE,
