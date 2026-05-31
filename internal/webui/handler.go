@@ -61,6 +61,12 @@ func (h *UIHandler) Settings(w http.ResponseWriter, r *http.Request) {
 	h.renderPage(w, "settings.html", nil)
 }
 
+// Login handles GET /login.
+func (h *UIHandler) Login(w http.ResponseWriter, r *http.Request) {
+	// Stub — template added in Task 8
+	http.Error(w, "login page coming soon", http.StatusNotImplemented)
+}
+
 func (h *UIHandler) renderPage(w http.ResponseWriter, page string, data any) {
 	tmpl, err := template.ParseFS(h.tmplFS, "layout.html", page)
 	if err != nil {
