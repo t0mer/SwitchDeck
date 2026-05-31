@@ -7,147 +7,109 @@
 </div>
 
 <div class="page-content">
-  <form id="settings-form" style="max-width:600px">
-    <div class="settings-section">
-      <div class="settings-section-header">Authentication</div>
-      <div class="settings-section-body">
-        <div class="form-group">
-          <label class="toggle-wrap">
-            <label class="toggle">
-              <input id="s-auth-enabled" type="checkbox">
-              <span class="toggle-track"></span>
-            </label>
-            Require API token for all requests
+  <div style="display:flex;justify-content:flex-end;margin-bottom:16px" id="logout-row" class="hidden">
+    <button type="button" class="btn btn-secondary btn-sm" id="btn-logout">Sign out</button>
+  </div>
+
+  <!-- Authentication toggle -->
+  <div class="settings-section" style="max-width:600px">
+    <div class="settings-section-header">Authentication</div>
+    <div class="settings-section-body">
+      <div class="form-group">
+        <label class="toggle-wrap">
+          <label class="toggle">
+            <input id="s-auth-enabled" type="checkbox">
+            <span class="toggle-track"></span>
           </label>
-          <div class="form-hint">When enabled, all API and UI requests must include the token via <code>X-API-Token</code> header.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="s-auth-token">API Token</label>
-          <div class="flex gap-2">
-            <input id="s-auth-token" class="form-control" type="password" placeholder="Enter or generate a token">
-            <button type="button" class="btn btn-secondary" id="btn-gen-token">Generate</button>
-          </div>
-        </div>
+          Require login to access SwitchDeck
+        </label>
+        <div class="form-hint">Protects both the web UI (login page) and the API. Set credentials below before enabling.</div>
       </div>
     </div>
+  </div>
 
-    <button type="submit" class="btn btn-primary">Save Settings</button>
-  </form>
+  <!-- Web Access -->
+  <div class="settings-section" style="max-width:600px;margin-top:16px">
+    <div class="settings-section-header">Web Access — Username &amp; Password</div>
+    <div class="settings-section-body">
+      <form id="credentials-form">
+        <div class="form-group">
+          <label class="form-label" for="s-username">Username</label>
+          <input id="s-username" class="form-control" type="text" placeholder="admin" autocomplete="username">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="s-password">New Password</label>
+            <input id="s-password" class="form-control" type="password" placeholder="Min. 8 characters" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="s-password2">Confirm Password</label>
+            <input id="s-password2" class="form-control" type="password" placeholder="Repeat password" autocomplete="new-password">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save Credentials</button>
+      </form>
+    </div>
+  </div>
 
-  <!-- Notifications section -->
-  <div class="settings-section" style="max-width:700px;margin-top:24px">
+  <!-- API Token -->
+  <div class="settings-section" style="max-width:700px;margin-top:16px">
     <div class="settings-section-header" style="display:flex;align-items:center;justify-content:space-between">
-      <span>Notifications</span>
-      <button type="button" class="btn btn-primary btn-sm" id="btn-add-notif">+ Add Channel</button>
+      <span>API Tokens — External Access</span>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-add-token">+ Add Token</button>
     </div>
     <div class="settings-section-body" style="padding:0">
-      <div id="notif-list"></div>
+      <div class="form-group" style="display:none">
+        <div id="token-list-wrap" style="padding:0"></div>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Add / Edit notification modal -->
-<div id="notif-modal-backdrop" class="modal-backdrop hidden">
-  <div class="modal-box" style="max-width:520px">
-    <div class="modal-header">
-      <span class="modal-title" id="notif-modal-title">Add Channel</span>
-      <button class="modal-close" id="btn-close-notif-modal">&times;</button>
+  <!-- Add Token modal -->
+  <div id="token-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <span class="modal-title">Add API Token</span>
+        <button class="modal-close" id="btn-close-token-modal">&times;</button>
+      </div>
+      <div class="modal-body" id="token-modal-body">
+        <div id="token-create-form-wrap">
+          <div class="form-group">
+            <label class="form-label" for="t-name">Token name</label>
+            <input id="t-name" class="form-control" type="text" placeholder="e.g. Home Assistant" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="t-expiry">Expiry</label>
+            <select id="t-expiry" class="form-control">
+              <option value="0">Never</option>
+              <option value="86400">24 hours</option>
+              <option value="604800">7 days</option>
+              <option value="2592000">30 days</option>
+              <option value="custom">Custom date…</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="t-expiry-custom-wrap">
+            <label class="form-label" for="t-expiry-custom">Custom date</label>
+            <input id="t-expiry-custom" class="form-control" type="datetime-local">
+          </div>
+        </div>
+        <div id="token-reveal-wrap" class="hidden">
+          <div class="alert alert-success" style="margin-bottom:12px">Token created — copy it now. It won't be shown again.</div>
+          <div class="form-group">
+            <label class="form-label">Your token</label>
+            <div class="flex gap-2">
+              <input id="t-reveal" class="form-control text-mono" type="text" readonly style="flex:1;font-size:11px">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-token">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" id="token-modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-token-modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-create-token">Create Token</button>
+      </div>
     </div>
-    <form id="notif-form">
-      <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label" for="nf-name">Name</label>
-          <input id="nf-name" class="form-control" type="text" placeholder="My Slack" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="nf-provider">Provider</label>
-          <select id="nf-provider" class="form-control">
-            <option value="shoutrrr">Shoutrrr (Slack, Discord, Telegram, SMTP…)</option>
-            <option value="greenapi">GreenAPI (WhatsApp Cloud)</option>
-            <option value="whatsapp_web">WhatsApp Web (self-hosted)</option>
-          </select>
-        </div>
-
-        <!-- Shoutrrr fields -->
-        <div id="nf-fields-shoutrrr">
-          <div class="form-group">
-            <label class="form-label" for="nf-url">URL</label>
-            <input id="nf-url" class="form-control" type="text" placeholder="slack://token@channel">
-          </div>
-        </div>
-
-        <!-- GreenAPI fields -->
-        <div id="nf-fields-greenapi" class="hidden">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="nf-instance-id">Instance ID</label>
-              <input id="nf-instance-id" class="form-control" type="text">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="nf-ga-token">Token</label>
-              <input id="nf-ga-token" class="form-control" type="password">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="nf-recipient">Recipient Phone</label>
-              <input id="nf-recipient" class="form-control" type="text" placeholder="972501234567">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="nf-api-url">API URL (optional)</label>
-              <input id="nf-api-url" class="form-control" type="text" placeholder="https://api.green-api.com">
-            </div>
-          </div>
-        </div>
-
-        <!-- WhatsApp Web fields -->
-        <div id="nf-fields-whatsapp_web" class="hidden">
-          <div class="form-group">
-            <label class="form-label" for="nf-base-url">Base URL</label>
-            <input id="nf-base-url" class="form-control" type="text" placeholder="http://localhost:3000">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="nf-wa-recipient">Recipient Phone</label>
-              <input id="nf-wa-recipient" class="form-control" type="text" placeholder="972501234567">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="nf-wa-username">Username (optional)</label>
-              <input id="nf-wa-username" class="form-control" type="text">
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="nf-wa-password">Password (optional)</label>
-            <input id="nf-wa-password" class="form-control" type="password">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="toggle-wrap">
-            <label class="toggle"><input id="nf-notify-offline" type="checkbox" checked><span class="toggle-track"></span></label>
-            Notify when switch goes offline
-          </label>
-        </div>
-        <div class="form-group">
-          <label class="toggle-wrap">
-            <label class="toggle"><input id="nf-notify-online" type="checkbox" checked><span class="toggle-track"></span></label>
-            Notify when switch comes back online
-          </label>
-        </div>
-        <div class="form-group">
-          <label class="toggle-wrap">
-            <label class="toggle"><input id="nf-enabled" type="checkbox" checked><span class="toggle-track"></span></label>
-            Enabled
-          </label>
-        </div>
-        <div id="nf-test-result" class="hidden" style="margin-top:8px"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-notif">Send Test</button>
-        <button type="button" class="btn btn-secondary" id="btn-cancel-notif-modal">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save</button>
-      </div>
-    </form>
   </div>
+
 </div>
 {{end}}
