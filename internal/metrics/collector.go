@@ -5,7 +5,6 @@ package metrics
 import (
 	"context"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -78,11 +77,10 @@ type SwitchCollector struct {
 	stormUnknownKbps     *prometheus.Desc
 
 	// misc
-	loopPrevention     *prometheus.Desc
-	vlanCount          *prometheus.Desc
-	lagCount           *prometheus.Desc
-	collectionDuration *prometheus.Desc
-	scrapeSuccess      *prometheus.Desc
+	loopPrevention *prometheus.Desc
+	vlanCount      *prometheus.Desc
+	lagCount       *prometheus.Desc
+	scrapeSuccess  *prometheus.Desc
 }
 
 func d(name, help string, labels []string) *prometheus.Desc {
@@ -141,11 +139,10 @@ func NewSwitchCollector(mgr *manager.Manager, st store.Store, encKey []byte) *Sw
 		stormMulticastKbps:   d("storm_multicast_kbps", "Storm control multicast threshold in Kbps (0 = disabled).", portLabels),
 		stormUnknownKbps:     d("storm_unknown_unicast_kbps", "Storm control unknown-unicast threshold in Kbps (0 = disabled).", portLabels),
 
-		loopPrevention:     d("loop_prevention_enabled", "1 if loop prevention is enabled.", swLabels),
-		vlanCount:          d("vlan_count", "Number of configured VLANs.", swLabels),
-		lagCount:           d("lag_count", "Number of configured Link Aggregation Groups.", swLabels),
-		collectionDuration: d("collection_duration_seconds", "Time taken to collect data from the switch in seconds.", swLabels),
-		scrapeSuccess:      d("scrape_success", "1 if the last scrape of this switch succeeded.", swLabels),
+		loopPrevention: d("loop_prevention_enabled", "1 if loop prevention is enabled.", swLabels),
+		vlanCount:      d("vlan_count", "Number of configured VLANs.", swLabels),
+		lagCount:       d("lag_count", "Number of configured Link Aggregation Groups.", swLabels),
+		scrapeSuccess:  d("scrape_success", "1 if a cached snapshot is available for this switch.", swLabels),
 	}
 }
 
@@ -171,21 +168,24 @@ func (c *SwitchCollector) allDescs() []*prometheus.Desc {
 		c.bandwidthIngressKbps, c.bandwidthEgressKbps,
 		c.stormBroadcastKbps, c.stormMulticastKbps, c.stormUnknownKbps,
 		c.loopPrevention, c.vlanCount, c.lagCount,
-		c.collectionDuration, c.scrapeSuccess,
+		c.scrapeSuccess,
 	}
 }
 
 type scrapeResult struct {
 	cfg  models.SwitchConfig
 	snap *models.SwitchSnapshot
-	dur  time.Duration
 	err  error
 }
 
-// Collect triggers a fresh CollectNow on every enabled switch in parallel and
-// emits all available metrics from the returned snapshots.
+// Collect reads the most-recent cached snapshot from each enabled switch's
+// background worker and emits all available metrics. Using the cache avoids
+// triggering a new login + collection cycle on every Prometheus scrape, which
+// would amplify load on the switches and could be abused as a DoS vector.
+// The cache is kept current by the workers' poll tickers (poll_stats_secs /
+// poll_config_secs), so scrape data is always at most one poll interval old.
 func (c *SwitchCollector) Collect(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	cfgs, err := c.st.ListSwitches(ctx, c.encKey)
@@ -193,24 +193,12 @@ func (c *SwitchCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	results := make(chan scrapeResult, len(cfgs))
-	var wg sync.WaitGroup
 	for _, cfg := range cfgs {
 		if !cfg.Enabled {
 			continue
 		}
-		wg.Add(1)
-		go func(cfg models.SwitchConfig) {
-			defer wg.Done()
-			start := time.Now()
-			snap, err := c.mgr.CollectNow(ctx, cfg.ID)
-			results <- scrapeResult{cfg: cfg, snap: snap, dur: time.Since(start), err: err}
-		}(cfg)
-	}
-	go func() { wg.Wait(); close(results) }()
-
-	for r := range results {
-		c.emitSwitch(ch, r)
+		snap, err := c.mgr.LastSnapshot(cfg.ID)
+		c.emitSwitch(ch, scrapeResult{cfg: cfg, snap: snap, err: err})
 	}
 }
 
@@ -222,7 +210,6 @@ func (c *SwitchCollector) emitSwitch(ch chan<- prometheus.Metric, r scrapeResult
 		success = 0
 	}
 	ch <- g(c.scrapeSuccess, success, id, name)
-	ch <- g(c.collectionDuration, r.dur.Seconds(), id, name)
 
 	if r.err != nil || r.snap == nil {
 		ch <- g(c.switchUp, 0, id, name)
