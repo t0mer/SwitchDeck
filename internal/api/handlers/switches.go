@@ -38,6 +38,7 @@ type switchResponse struct {
 	PortsUp         int                 `json:"ports_up"`
 	PortsDown       int                 `json:"ports_down"`
 	CollectingSince int64               `json:"collecting_since,omitempty"` // unix seconds, non-zero while collecting
+	PortStates      []string            `json:"port_states,omitempty"`      // per-port status in port-number order: "up"|"down"|"disabled"
 }
 
 func cfgToResponse(cfg models.SwitchConfig, status models.SwitchStatus) switchResponse {
@@ -69,7 +70,9 @@ func (h *Handlers) ListSwitches(w http.ResponseWriter, r *http.Request) {
 		}
 		if snap, err := h.Store.LatestSnapshot(r.Context(), cfg.ID); err == nil {
 			resp[i].Model = snap.Switch.Model
-			for _, p := range snap.Ports {
+			states := make([]string, len(snap.Ports))
+			for j, p := range snap.Ports {
+				states[j] = string(p.Status)
 				resp[i].PortsTotal++
 				switch p.Status {
 				case models.PortStatusUp:
@@ -77,6 +80,9 @@ func (h *Handlers) ListSwitches(w http.ResponseWriter, r *http.Request) {
 				case models.PortStatusDown:
 					resp[i].PortsDown++
 				}
+			}
+			if len(states) > 0 {
+				resp[i].PortStates = states
 			}
 		}
 	}

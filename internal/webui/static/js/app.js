@@ -257,13 +257,18 @@ function buildSwitchCard(sw) {
   body.appendChild(stats);
   card.appendChild(body);
 
-  // ── Port LED strip
+  // ── Port LED strip — per-port actual status when available
   const ledStrip = el('div', 'port-led-strip');
   const ledLabel = el('span', 'port-led-label', 'Ports');
   const leds = el('div', 'port-leds');
-  const portCount = total || 8;
+  const states = sw.port_states || [];
+  const portCount = states.length || total || 8;
   for (let i = 0; i < portCount; i++) {
-    leds.appendChild(el('div', 'port-led ' + (i < up ? 'led-up' : 'led-down')));
+    const st = states[i] || 'down';
+    const cls = st === 'up' ? 'led-up' : st === 'disabled' ? 'led-disabled' : 'led-down';
+    const led = el('div', `port-led ${cls}`);
+    led.title = `Port ${i + 1}: ${st}`;
+    leds.appendChild(led);
   }
   append(ledStrip, ledLabel, leds);
   card.appendChild(ledStrip);
