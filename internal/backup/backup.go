@@ -29,14 +29,29 @@ var settingsKeys = []string{
 	"auth_password_hash",
 }
 
+// SwitchRecord is a SwitchConfig with the password included in plaintext.
+// models.SwitchConfig deliberately omits Password from JSON, so we use a
+// separate type here that explicitly includes it for backup purposes.
+type SwitchRecord struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	IP             string `json:"ip"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	InsecureTLS    bool   `json:"insecure_tls"`
+	Enabled        bool   `json:"enabled"`
+	PollStatsSecs  int    `json:"poll_stats_secs"`
+	PollConfigSecs int    `json:"poll_config_secs"`
+}
+
 // File is the top-level backup document.
 type File struct {
-	Version              int                  `json:"version"`
-	CreatedAt            time.Time            `json:"created_at"`
-	Settings             map[string]string    `json:"settings"`
-	Switches             []models.SwitchConfig `json:"switches"`
-	APITokens            []TokenRecord        `json:"api_tokens"`
-	NotificationChannels []ChannelRecord      `json:"notification_channels"`
+	Version              int               `json:"version"`
+	CreatedAt            time.Time         `json:"created_at"`
+	Settings             map[string]string `json:"settings"`
+	Switches             []SwitchRecord    `json:"switches"`
+	APITokens            []TokenRecord     `json:"api_tokens"`
+	NotificationChannels []ChannelRecord   `json:"notification_channels"`
 }
 
 // TokenRecord is a token row as it appears in the backup.
@@ -71,23 +86,32 @@ func Export(ctx context.Context, db *sql.DB, st store.Store, encKey []byte, ns *
 		Settings:  make(map[string]string),
 	}
 
-	// settings
+	// settings — GetSetting returns an error when the key doesn't exist yet;
+	// treat a missing key as an empty value and skip it.
 	for _, key := range settingsKeys {
 		val, err := st.GetSetting(ctx, key)
-		if err != nil && err != sql.ErrNoRows {
-			return nil, fmt.Errorf("read setting %s: %w", key, err)
+		if err != nil {
+			continue // key not set — omit from backup
 		}
 		if val != "" {
 			f.Settings[key] = val
 		}
 	}
 
-	// switches (passwords decrypted by ListSwitches)
-	switches, err := st.ListSwitches(ctx, encKey)
+	// switches — ListSwitches returns plaintext passwords in memory;
+	// copy into SwitchRecord so the password is included in the JSON output.
+	cfgs, err := st.ListSwitches(ctx, encKey)
 	if err != nil {
 		return nil, fmt.Errorf("list switches: %w", err)
 	}
-	f.Switches = switches
+	for _, c := range cfgs {
+		f.Switches = append(f.Switches, SwitchRecord{
+			ID: c.ID, Name: c.Name, IP: c.IP,
+			Username: c.Username, Password: c.Password,
+			InsecureTLS: c.InsecureTLS, Enabled: c.Enabled,
+			PollStatsSecs: c.PollStatsSecs, PollConfigSecs: c.PollConfigSecs,
+		})
+	}
 
 	// api tokens — query directly to include the hash
 	rows, err := db.QueryContext(ctx,
@@ -159,7 +183,13 @@ func Restore(ctx context.Context, db *sql.DB, st store.Store, encKey []byte, ns 
 	}
 
 	// ── restore switches (re-encrypted with this server's key) ────────────
-	for _, sw := range f.Switches {
+	for _, rec := range f.Switches {
+		sw := models.SwitchConfig{
+			ID: rec.ID, Name: rec.Name, IP: rec.IP,
+			Username: rec.Username, Password: rec.Password,
+			InsecureTLS: rec.InsecureTLS, Enabled: rec.Enabled,
+			PollStatsSecs: rec.PollStatsSecs, PollConfigSecs: rec.PollConfigSecs,
+		}
 		if err := st.AddSwitch(ctx, sw, encKey); err != nil {
 			return fmt.Errorf("restore switch %s: %w", sw.Name, err)
 		}

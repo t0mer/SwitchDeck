@@ -111,5 +111,79 @@
     </div>
   </div>
 
+
+  <!-- ── Backup & Restore ─────────────────────────────────────── -->
+  <div class="settings-card">
+    <div class="settings-card-header">
+      <h2 class="settings-card-title">Backup &amp; Restore</h2>
+    </div>
+    <p class="text-muted" style="margin-bottom:16px;font-size:13px">
+      The backup includes all switches, credentials, API tokens, and notification
+      channels. Store the file securely — it contains passwords in plaintext.
+    </p>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">
+      <a id="btn-download-backup" href="/api/v1/backup" download
+         class="btn btn-primary">Download Backup</a>
+    </div>
+
+    <div class="section-divider" style="margin-bottom:20px"></div>
+
+    <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Restore from backup</h3>
+    <p class="text-muted" style="font-size:12px;margin-bottom:12px">
+      Restoring will <strong>replace all</strong> existing switches, tokens, and notification channels.
+      Auth credentials will be overwritten with those from the backup.
+    </p>
+
+    <div class="form-group" style="max-width:400px">
+      <input id="restore-file" type="file" class="form-control" accept=".json,application/json">
+    </div>
+    <button type="button" class="btn btn-danger" id="btn-restore-backup" disabled>Restore</button>
+    <p id="restore-status" class="text-muted" style="font-size:12px;margin-top:8px"></p>
+  </div>
+
 </div>
+
+<script>
+(function () {
+  var fileInput  = document.getElementById('restore-file');
+  var restoreBtn = document.getElementById('btn-restore-backup');
+  var statusEl   = document.getElementById('restore-status');
+
+  fileInput.addEventListener('change', function () {
+    restoreBtn.disabled = !fileInput.files.length;
+    statusEl.textContent = '';
+  });
+
+  restoreBtn.addEventListener('click', async function () {
+    if (!fileInput.files.length) return;
+    if (!confirm('This will replace ALL current switches, tokens, and channels. Continue?')) return;
+
+    restoreBtn.disabled = true;
+    statusEl.textContent = 'Restoring…';
+    statusEl.style.color = '';
+
+    var form = new FormData();
+    form.append('file', fileInput.files[0]);
+
+    try {
+      var res = await fetch('/api/v1/backup/restore', { method: 'POST', body: form });
+      var body = await res.json().catch(function () { return {}; });
+      if (res.ok) {
+        statusEl.textContent = 'Restore successful. Reload the page to see the updated configuration.';
+        statusEl.style.color = 'var(--accent)';
+        fileInput.value = '';
+      } else {
+        statusEl.textContent = 'Restore failed: ' + (body.error || res.statusText);
+        statusEl.style.color = 'var(--danger, #e05)';
+      }
+    } catch (err) {
+      statusEl.textContent = 'Network error: ' + err.message;
+      statusEl.style.color = 'var(--danger, #e05)';
+    } finally {
+      restoreBtn.disabled = false;
+    }
+  });
+})();
+</script>
 {{end}}
