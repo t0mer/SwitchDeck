@@ -209,6 +209,54 @@ Click **+ Add Switch** on the dashboard and fill in:
 
 SwitchDeck starts collecting data immediately after the switch is saved.
 
+### Backup & Restore
+
+Open **Settings → Backup & Restore**.
+
+- **Download Backup** — exports a `switchdeck-backup-<timestamp>.json` file containing all switches (including passwords), auth credentials, API token hashes, and notification channel credentials. **Store the file securely — it contains passwords in plaintext.**
+- **Restore** — upload a backup file and confirm. All existing switches, API tokens, and notification channels are replaced with the contents of the file. Credentials are automatically re-encrypted with the target server's encryption key, so backups are fully portable across machines.
+
+Restore can also be triggered via API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/backup/restore \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@switchdeck-backup-2026-05-31T120000Z.json"
+```
+
+### Prometheus metrics
+
+SwitchDeck exposes a Prometheus-compatible `/metrics` endpoint. No credentials are required. Add it to your Prometheus `scrape_configs`:
+
+```yaml
+scrape_configs:
+  - job_name: switchdeck
+    static_configs:
+      - targets: ["localhost:8080"]
+```
+
+Metrics are read from the in-memory worker cache — scraping never triggers a new login or collection cycle on the switches.
+
+**Available metrics** (all prefixed `switchdeck_`):
+
+| Metric | Type | Description |
+|---|---|---|
+| `switch_info` | Gauge | Metadata labels: ip, model, firmware, hardware |
+| `switch_up` | Gauge | 1 if online |
+| `switch_ports_total/up/down` | Gauge | Port link summary |
+| `switch_last_collected_timestamp_seconds` | Gauge | Unix timestamp of last collection |
+| `port_up` / `port_enabled` / `port_speed_mbps` | Gauge | Per-port link state |
+| `port_rx/tx_bytes/packets/errors/dropped_total` | Counter | Per-port traffic counters |
+| `poe_budget_watts` / `poe_consumed_watts` | Gauge | PoE budget |
+| `poe_port_enabled` / `poe_port_watts` | Gauge | Per-port PoE consumption |
+| `stp_enabled` / `stp_port_state` | Gauge | Spanning Tree state |
+| `mac_table_entries_total` / `lldp_neighbors_total` | Gauge | L2 table sizes |
+| `igmp_enabled` / `igmp_groups_total` | Gauge | IGMP snooping |
+| `qos_port_priority` | Gauge | Per-port QoS priority |
+| `bandwidth_ingress/egress_kbps` | Gauge | Rate limits |
+| `storm_broadcast/multicast/unknown_unicast_kbps` | Gauge | Storm thresholds |
+| `loop_prevention_enabled` / `vlan_count` / `lag_count` | Gauge | Misc switch config |
+
 ## API
 
 The REST API is available under `/api/v1`. When authentication is enabled, include either a session cookie (obtained via `POST /api/v1/auth/login`) or an `Authorization: Bearer <token>` header.
