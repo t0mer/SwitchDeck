@@ -3,18 +3,29 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
 	"github.com/t0mer/SwitchDeck/internal/models"
 )
 
-// Store persists switch inventory, snapshots, and settings.
+// ApiToken is a named bearer token for external API access.
+type ApiToken struct {
+	ID        string
+	Name      string
+	Expiry    int64 // unix timestamp; 0 = never
+	CreatedAt time.Time
+}
+
+// Store persists switch inventory, snapshots, settings, and API tokens.
 type Store interface {
 	EncryptionKey() ([]byte, error)
 	AddSwitch(ctx context.Context, cfg models.SwitchConfig, encKey []byte) error
@@ -26,6 +37,11 @@ type Store interface {
 	LatestSnapshot(ctx context.Context, switchID string) (*models.SwitchSnapshot, error)
 	GetSetting(ctx context.Context, key string) (string, error)
 	SetSetting(ctx context.Context, key, value string) error
+	// API token management
+	CreateApiToken(ctx context.Context, name, plaintext string, expiry int64) (*ApiToken, error)
+	ListApiTokens(ctx context.Context) ([]ApiToken, error)
+	DeleteApiToken(ctx context.Context, id string) error
+	MatchApiToken(ctx context.Context, plaintext string) (*ApiToken, error)
 	Close() error
 	DB() *sql.DB
 }
@@ -224,3 +240,69 @@ func boolInt(b bool) int {
 }
 
 func nowUnix() int64 { return time.Now().Unix() }
+
+// ── API tokens ────────────────────────────────────────────────────────────
+
+func hashToken(plaintext string) string {
+	h := sha256.Sum256([]byte(plaintext))
+	return hex.EncodeToString(h[:])
+}
+
+func (s *SQLiteStore) CreateApiToken(ctx context.Context, name, plaintext string, expiry int64) (*ApiToken, error) {
+	id := uuid.New().String()
+	now := nowUnix()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO api_tokens (id, name, token_hash, expiry, created_at) VALUES (?,?,?,?,?)`,
+		id, name, hashToken(plaintext), expiry, now)
+	if err != nil {
+		return nil, fmt.Errorf("create api token: %w", err)
+	}
+	return &ApiToken{ID: id, Name: name, Expiry: expiry, CreatedAt: time.Unix(now, 0)}, nil
+}
+
+func (s *SQLiteStore) ListApiTokens(ctx context.Context) ([]ApiToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, expiry, created_at FROM api_tokens ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ApiToken
+	for rows.Next() {
+		var t ApiToken
+		var ca int64
+		if err := rows.Scan(&t.ID, &t.Name, &t.Expiry, &ca); err != nil {
+			return nil, err
+		}
+		t.CreatedAt = time.Unix(ca, 0)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteApiToken(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM api_tokens WHERE id=?`, id)
+	return err
+}
+
+// MatchApiToken checks whether plaintext matches any stored token that hasn't
+// expired. Returns the matching token on success.
+func (s *SQLiteStore) MatchApiToken(ctx context.Context, plaintext string) (*ApiToken, error) {
+	h := hashToken(plaintext)
+	var t ApiToken
+	var ca int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, name, expiry, created_at FROM api_tokens WHERE token_hash=?`, h).
+		Scan(&t.ID, &t.Name, &t.Expiry, &ca)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("token not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.CreatedAt = time.Unix(ca, 0)
+	if t.Expiry != 0 && time.Now().Unix() > t.Expiry {
+		return nil, fmt.Errorf("token expired")
+	}
+	return &t, nil
+}

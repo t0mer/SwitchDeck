@@ -7,8 +7,10 @@ import (
 	"os"
 
 	flag "github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/t0mer/SwitchDeck/internal/api/handlers"
+	"github.com/t0mer/SwitchDeck/internal/auth"
 	"github.com/t0mer/SwitchDeck/internal/config"
 	"github.com/t0mer/SwitchDeck/internal/manager"
 	"github.com/t0mer/SwitchDeck/internal/models"
@@ -28,6 +30,7 @@ func main() {
 	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level: debug, info, warning, error")
 	flag.StringVar(&cfg.DataDir, "data", cfg.DataDir, "Data directory")
 	showVersion := flag.Bool("version", false, "Print version and exit")
+	resetPassword := flag.Bool("reset-password", false, "Reset admin credentials interactively and exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -39,6 +42,13 @@ func main() {
 
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		log.Fatalf("create data dir: %v", err)
+	}
+
+	if *resetPassword {
+		if err := runResetPassword(cfg.DataDir); err != nil {
+			log.Fatalf("reset-password: %v", err)
+		}
+		os.Exit(0)
 	}
 
 	st, err := store.Open(cfg.DBPath)
@@ -76,4 +86,51 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("server: %v", err)
 	}
+}
+
+func runResetPassword(dataDir string) error {
+	st, err := store.Open(dataDir + "/switchdeck.db")
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	defer st.Close()
+
+	fmt.Print("New username: ")
+	var username string
+	fmt.Scanln(&username)
+	if username == "" {
+		return fmt.Errorf("username cannot be empty")
+	}
+
+	fmt.Print("New password: ")
+	pw1, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return fmt.Errorf("read password: %w", err)
+	}
+	if len(pw1) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+
+	fmt.Print("Confirm password: ")
+	pw2, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return fmt.Errorf("read password: %w", err)
+	}
+	if string(pw1) != string(pw2) {
+		return fmt.Errorf("passwords do not match")
+	}
+
+	hash, err := auth.HashPassword(string(pw1))
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	ctx := context.Background()
+	st.SetSetting(ctx, "auth_username", username)
+	st.SetSetting(ctx, "auth_password_hash", hash)
+
+	fmt.Println("Credentials updated. Restart the server to apply.")
+	return nil
 }

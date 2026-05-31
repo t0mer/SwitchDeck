@@ -61,6 +61,25 @@ func (h *UIHandler) Settings(w http.ResponseWriter, r *http.Request) {
 	h.renderPage(w, "settings.html", nil)
 }
 
+// Notifications handles GET /notifications.
+func (h *UIHandler) Notifications(w http.ResponseWriter, r *http.Request) {
+	h.renderPage(w, "notifications.html", nil)
+}
+
+// Login handles GET /login — standalone page, no sidebar layout.
+func (h *UIHandler) Login(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFS(h.tmplFS, "login.html")
+	if err != nil {
+		log.Printf("template parse error: %v", err)
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.Execute(w, nil); err != nil {
+		log.Printf("template execute error: %v", err)
+	}
+}
+
 func (h *UIHandler) renderPage(w http.ResponseWriter, page string, data any) {
 	tmpl, err := template.ParseFS(h.tmplFS, "layout.html", page)
 	if err != nil {
