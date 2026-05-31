@@ -83,7 +83,9 @@
 (function() {
   var form   = document.getElementById('login-form');
   var errEl  = document.getElementById('login-error');
-  var next   = new URLSearchParams(location.search).get('next') || '/';
+  // Restrict redirect to same-origin relative paths to prevent open-redirect attacks.
+  var rawNext = new URLSearchParams(location.search).get('next') || '/';
+  var next = (rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.startsWith('/\\')) ? rawNext : '/';
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
