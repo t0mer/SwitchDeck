@@ -50,3 +50,55 @@ Built in Go with an embedded web UI — a single binary, no external dependencie
 
 ### Login
 ![Login page](assets/screenshots/login.png)
+
+## Installation
+
+### Docker (recommended)
+
+```bash
+docker run -d \
+  --name switchdeck \
+  -p 8080:8080 \
+  -v switchdeck-data:/data \
+  --restart unless-stopped \
+  techblog/switchdeck:latest
+```
+
+Or with Docker Compose:
+
+```yaml
+services:
+  switchdeck:
+    image: techblog/switchdeck:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - switchdeck-data:/data
+    restart: unless-stopped
+
+volumes:
+  switchdeck-data:
+```
+
+Then open `http://localhost:8080` in your browser.
+
+### From pre-built binaries
+
+Download the latest release from the [Releases page](https://github.com/t0mer/SwitchDeck/releases), then:
+
+```bash
+# Linux amd64 example
+chmod +x switchdeck-linux-amd64
+./switchdeck-linux-amd64
+```
+
+### Build from source
+
+Requirements: **Go 1.25+**
+
+```bash
+git clone https://github.com/t0mer/SwitchDeck.git
+cd SwitchDeck
+go build -o switchdeck ./cmd/switchdeck
+./switchdeck
+```
