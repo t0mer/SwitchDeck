@@ -1,0 +1,12 @@
+.git
+.github
+.claude/
+data/
+dist/
+docs/
+*.db
+*.db-journal
+*.md
+!README.md
+.env
+.env.*
