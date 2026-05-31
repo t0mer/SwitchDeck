@@ -413,13 +413,28 @@ input,button,select,textarea{font-family:inherit}
   flex-shrink:0;
   transition:background .3s,box-shadow .3s;
 }
-.led-up{
-  background:var(--accent);
+/* Port LED colours — match the speed-based coloring scheme */
+.led-1g,.led-up{                                   /* 1 G+  → green  */
+  background:#00e5a0;
   border-color:rgba(0,229,160,.4);
   box-shadow:0 0 8px rgba(0,229,160,.4);
 }
-.led-down{background:var(--surface-3);border-color:var(--border)}
-.led-disabled{background:var(--surface-2);border-color:var(--border)}
+.led-100m{                                         /* 100 M → yellow */
+  background:#eab308;
+  border-color:rgba(234,179,8,.4);
+  box-shadow:0 0 8px rgba(234,179,8,.35);
+}
+.led-10m{                                          /* 10 M  → orange */
+  background:#f97316;
+  border-color:rgba(249,115,22,.4);
+  box-shadow:0 0 8px rgba(249,115,22,.35);
+}
+.led-down{                                         /* enabled, no link → red */
+  background:#ff4455;
+  border-color:rgba(255,68,85,.4);
+  box-shadow:0 0 8px rgba(255,68,85,.35);
+}
+.led-disabled{background:var(--surface-3);border-color:var(--border)} /* disabled → grey */
 
 /* Card actions */
 .switch-card-actions{
@@ -500,9 +515,11 @@ tbody tr:hover{background:var(--surface-2)}
   vertical-align:middle;
   flex-shrink:0;
 }
-.dot-up{background:var(--success);box-shadow:0 0 6px var(--success)}
-.dot-down{background:var(--danger);box-shadow:0 0 6px rgba(255,68,85,.4)}
-.dot-disabled{background:var(--text-dim)}
+.dot-1g,.dot-up{background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.5)}  /* 1G+     → green  */
+.dot-100m      {background:#eab308;box-shadow:0 0 6px rgba(234,179,8,.5)}  /* 100M    → yellow */
+.dot-10m       {background:#f97316;box-shadow:0 0 6px rgba(249,115,22,.5)} /* 10M     → orange */
+.dot-down      {background:#ff4455;box-shadow:0 0 6px rgba(255,68,85,.4)}  /* no link → red    */
+.dot-disabled  {background:var(--text-dim)}                                /* disabled→ grey   */
 
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 .tabs{

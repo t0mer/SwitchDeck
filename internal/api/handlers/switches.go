@@ -72,14 +72,28 @@ func (h *Handlers) ListSwitches(w http.ResponseWriter, r *http.Request) {
 			resp[i].Model = snap.Switch.Model
 			states := make([]string, len(snap.Ports))
 			for j, p := range snap.Ports {
-				states[j] = string(p.Status)
-				resp[i].PortsTotal++
+				// Encode enough information for the UI to colour each port LED:
+				//   "disabled"        — port is administratively disabled
+				//   "down"            — enabled but no link
+				//   "10M"|"100M"|"1G" — link up at this speed (2.5G / 10G map to "1G")
 				switch p.Status {
 				case models.PortStatusUp:
+					switch p.Speed {
+					case models.PortSpeed10M:
+						states[j] = "10M"
+					case models.PortSpeed100M:
+						states[j] = "100M"
+					default: // 1G, 2.5G, 10G, or unknown fast link
+						states[j] = "1G"
+					}
 					resp[i].PortsUp++
 				case models.PortStatusDown:
+					states[j] = "down"
 					resp[i].PortsDown++
+				default: // PortStatusDisabled
+					states[j] = "disabled"
 				}
+				resp[i].PortsTotal++
 			}
 			if len(states) > 0 {
 				resp[i].PortStates = states
