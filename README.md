@@ -17,6 +17,8 @@ Built in Go with an embedded web UI — a single binary, no external dependencie
 - **API tokens** — named bearer tokens for external API access (e.g. Home Assistant, scripts); each token is stored as a SHA-256 hash and shown in plaintext only once
 - **Dark / light mode** — system-preference-aware toggle; preference persisted in `localStorage`
 - **Responsive layout** — collapsible sidebar on desktop; fixed bottom tab bar on mobile
+- **Prometheus metrics** — `GET /metrics` exposes per-switch and per-port gauges and counters (port state, speed, TX/RX bytes/packets/errors, PoE watts, STP state, IGMP, QoS, bandwidth limits, storm control, VLAN and LAG counts) read from the in-memory worker cache; no credentials required
+- **Backup & Restore** — download a portable JSON backup of all switches (with passwords), auth settings, API tokens, and notification channel credentials; restore on a different server with one click — credentials are re-encrypted with the target server's key automatically
 - **Docker-ready** — multi-arch image (`amd64`, `arm64`, `armv7`) published to Docker Hub
 
 ## Screenshots
