@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,29 +27,31 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	authProvider := func() (bool, string) {
-		ctx := context.Background()
-		enabled, _ := st.GetSetting(ctx, "auth_enabled")
-		token, _ := st.GetSetting(ctx, "auth_token")
-		return enabled == "true", token
-	}
-
-	// Frontend UI routes
 	ui, err := webui.NewHandler()
 	if err != nil {
 		log.Fatalf("webui: %v", err)
 	}
-	r.Get("/", ui.Dashboard)
-	r.Get("/switches/{id}", ui.SwitchDetail)
-	r.Get("/settings", ui.Settings)
+
+	// ── Always public ───────────────────────────────────────────────────────
 	r.Get("/static/*", ui.ServeStatic)
-
 	r.Get("/health", h.HealthCheck)
+	r.Get("/login", ui.Login)
+	r.Post("/api/v1/auth/login", h.Login)
+	r.Post("/api/v1/auth/logout", h.Logout)
+	r.Get("/api/v1/auth/session", h.Session)
 
+	// ── UI routes (redirect to /login on auth failure) ─────────────────────
+	r.Group(func(r chi.Router) {
+		r.Use(mw.AuthUI(st))
+		r.Get("/", ui.Dashboard)
+		r.Get("/switches/{id}", ui.SwitchDetail)
+		r.Get("/settings", ui.Settings)
+	})
+
+	// ── API routes (401 JSON on auth failure) ──────────────────────────────
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(mw.Auth(authProvider))
+		r.Use(mw.AuthAPI(st))
 
-		// Switch inventory
 		r.Get("/switches", h.ListSwitches)
 		r.Post("/switches", h.AddSwitch)
 		r.Get("/switches/{id}", h.GetSwitch)
@@ -58,14 +59,12 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		r.Delete("/switches/{id}", h.DeleteSwitch)
 		r.Post("/switches/{id}/collect", h.TriggerCollect)
 
-		// Switch data (read)
 		r.Get("/switches/{id}/snapshot", h.GetSnapshot)
 		r.Get("/switches/{id}/ports", h.GetPorts)
 		r.Get("/switches/{id}/stats", h.GetStats)
 		r.Get("/switches/{id}/vlans", h.GetVLANs)
 		r.Get("/switches/{id}/lag", h.GetLAG)
 
-		// Switch actions (write)
 		r.Patch("/switches/{id}/ports/{port}", h.PatchPort)
 		r.Post("/switches/{id}/stats/reset", h.ResetStats)
 		r.Patch("/switches/{id}/vlans", h.PatchVLANs)
@@ -77,11 +76,10 @@ func New(cfg *config.Config, h *handlers.Handlers, st store.Store) *Server {
 		r.Patch("/switches/{id}/lag", h.PatchLAG)
 		r.Post("/switches/{id}/reboot", h.Reboot)
 
-		// Settings
 		r.Get("/settings", h.GetSettings)
 		r.Put("/settings", h.UpdateSettings)
+		r.Post("/settings/rotate-token", h.RotateToken)
 
-		// Notifications
 		r.Get("/notifications", h.ListNotifications)
 		r.Post("/notifications", h.CreateNotification)
 		r.Post("/notifications/test", h.TestNotification)
