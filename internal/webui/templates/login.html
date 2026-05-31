@@ -83,9 +83,16 @@
 (function() {
   var form   = document.getElementById('login-form');
   var errEl  = document.getElementById('login-error');
-  // Restrict redirect to same-origin relative paths to prevent open-redirect attacks.
-  var rawNext = new URLSearchParams(location.search).get('next') || '/';
-  var next = (rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.startsWith('/\\')) ? rawNext : '/';
+  // Use the URL API to validate the redirect target — string prefix checks are
+  // bypassable via tab/newline/CR before a scheme or browser parser quirks.
+  // Resolving against location.origin lets the browser normalise the value the
+  // same way location.href will, then we verify the resulting origin matches.
+  var next = '/';
+  try {
+    var rawNext = new URLSearchParams(location.search).get('next') || '/';
+    var u = new URL(rawNext, location.origin);
+    if (u.origin === location.origin) next = u.pathname + u.search + u.hash;
+  } catch (_) { /* malformed URL — keep next = '/' */ }
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
