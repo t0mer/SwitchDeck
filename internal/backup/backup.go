@@ -46,12 +46,13 @@ type SwitchRecord struct {
 
 // File is the top-level backup document.
 type File struct {
-	Version              int               `json:"version"`
-	CreatedAt            time.Time         `json:"created_at"`
-	Settings             map[string]string `json:"settings"`
-	Switches             []SwitchRecord    `json:"switches"`
-	APITokens            []TokenRecord     `json:"api_tokens"`
-	NotificationChannels []ChannelRecord   `json:"notification_channels"`
+	Version              int                       `json:"version"`
+	CreatedAt            time.Time                 `json:"created_at"`
+	Settings             map[string]string         `json:"settings"`
+	Switches             []SwitchRecord            `json:"switches"`
+	APITokens            []TokenRecord             `json:"api_tokens"`
+	NotificationChannels []ChannelRecord           `json:"notification_channels"`
+	PortNames            map[string]map[int]string `json:"port_names,omitempty"` // switch_id → port → name
 }
 
 // TokenRecord is a token row as it appears in the backup.
@@ -151,6 +152,18 @@ func Export(ctx context.Context, db *sql.DB, st store.Store, encKey []byte, ns *
 		})
 	}
 
+	// port names — collect for each switch
+	f.PortNames = make(map[string]map[int]string)
+	for _, sw := range f.Switches {
+		names, err := st.ListPortNames(ctx, sw.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list port names for %s: %w", sw.Name, err)
+		}
+		if len(names) > 0 {
+			f.PortNames[sw.ID] = names
+		}
+	}
+
 	return f, nil
 }
 
@@ -163,6 +176,11 @@ func Restore(ctx context.Context, db *sql.DB, st store.Store, encKey []byte, ns 
 	}
 
 	// ── wipe existing data ────────────────────────────────────────────────
+	// port_names cascade-deletes with switches, so clearing switches is enough,
+	// but we clear explicitly to be safe on partial restores.
+	if _, err := db.ExecContext(ctx, `DELETE FROM port_names`); err != nil {
+		return fmt.Errorf("clear port_names: %w", err)
+	}
 	if _, err := db.ExecContext(ctx, `DELETE FROM switches`); err != nil {
 		return fmt.Errorf("clear switches: %w", err)
 	}
@@ -225,6 +243,15 @@ func Restore(ctx context.Context, db *sql.DB, st store.Store, encKey []byte, ns 
 		}
 		if _, err := ns.Create(ctx, ch); err != nil {
 			return fmt.Errorf("restore channel %s: %w", ch.Name, err)
+		}
+	}
+
+	// ── restore port names ────────────────────────────────────────────────
+	for switchID, names := range f.PortNames {
+		for port, name := range names {
+			if err := st.SetPortName(ctx, switchID, port, name); err != nil {
+				return fmt.Errorf("restore port name %s/%d: %w", switchID, port, err)
+			}
 		}
 	}
 
