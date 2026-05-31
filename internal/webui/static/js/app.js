@@ -83,13 +83,22 @@ function collectingLabel(since) {
   return remaining > 0 ? `Collecting ~${remaining}s` : 'Finalizing…';
 }
 
+/** Map port status + speed to a CSS dot/LED class. */
+function portColorClass(status, speed) {
+  if (status === 'disabled') return 'disabled';
+  if (status !== 'up') return 'down';      // enabled but no link → red
+  if (speed === '10M')  return '10m';
+  if (speed === '100M') return '100m';
+  return '1g';                             // 1G, 2.5G, 10G → green
+}
+
 /** Build a port status dot + text span. */
-function portStatusEl(status) {
+function portStatusEl(status, speed) {
+  const cls = portColorClass(status, speed);
   const wrap = el('span');
-  const dot = el('span', 'port-status-dot ' + (
-    status === 'up' ? 'dot-up' : status === 'disabled' ? 'dot-disabled' : 'dot-down'
-  ));
-  append(wrap, dot, document.createTextNode(status || '—'));
+  const dot = el('span', 'port-status-dot dot-' + cls);
+  const label = status === 'up' ? (speed || 'up') : (status || '—');
+  append(wrap, dot, document.createTextNode(label));
   return wrap;
 }
 
@@ -280,8 +289,14 @@ function buildSwitchCard(sw) {
   const portCount = states.length || total || 8;
   for (let i = 0; i < portCount; i++) {
     const st = states[i] || 'down';
-    const cls = st === 'up' ? 'led-up' : st === 'disabled' ? 'led-disabled' : 'led-down';
-    const led = el('div', `port-led ${cls}`);
+    // state is now 'disabled'|'down'|'10M'|'100M'|'1G' — map to LED class
+    let ledCls;
+    if (st === 'disabled') ledCls = 'led-disabled';
+    else if (st === 'down') ledCls = 'led-down';
+    else if (st === '10M')  ledCls = 'led-10m';
+    else if (st === '100M') ledCls = 'led-100m';
+    else                    ledCls = 'led-1g'; // 1G+ or legacy 'up'
+    const led = el('div', `port-led ${ledCls}`);
     led.title = `Port ${i + 1}: ${st}`;
     leds.appendChild(led);
   }
@@ -584,7 +599,7 @@ async function renderPortsTab(snap, switchId) {
     nameCell.appendChild(nameInput);
 
     const statusCell = el('td');
-    statusCell.appendChild(portStatusEl(p.status));
+    statusCell.appendChild(portStatusEl(p.status, p.speed));
     const speedCell = el('td', null, p.speed || '—');
     const duplexCell = el('td', null, p.duplex || '—');
     const descCell = el('td', null, p.description || '—');
