@@ -102,3 +102,44 @@ cd SwitchDeck
 go build -o switchdeck ./cmd/switchdeck
 ./switchdeck
 ```
+
+## Running
+
+### CLI flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--port` | `8080` | HTTP listening port |
+| `--data` | `/data/switchdeck` | Data directory (SQLite database) |
+| `--log-level` | `info` | Log level: `debug`, `info`, `warning`, `error` |
+| `--version` | — | Print version and exit |
+| `--reset-password` | — | Interactively reset admin credentials and exit |
+
+### Environment variables
+
+Environment variables take precedence over built-in defaults; flags take precedence over environment variables.
+
+| Variable | Equivalent flag | Description |
+|---|---|---|
+| `PORT` | `--port` | Listening port |
+| `DATA_DIR` | `--data` | Data directory |
+| `LOG_LEVEL` | `--log-level` | Log level |
+
+### Examples
+
+```bash
+# Custom port and data directory
+./switchdeck --port 9090 --data /var/lib/switchdeck
+
+# Reset admin password from the CLI (no server needed)
+./switchdeck --reset-password --data /var/lib/switchdeck
+```
+
+### As a system service
+
+```bash
+./switchdeck --service install
+./switchdeck --service start
+```
+
+Supported actions: `install`, `uninstall`, `start`, `stop`, `restart`.
