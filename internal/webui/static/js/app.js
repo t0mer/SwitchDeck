@@ -1005,7 +1005,10 @@ document.getElementById('credentials-form')?.addEventListener('submit', async e 
 document.getElementById('btn-logout')?.addEventListener('click', async () => {
   try {
     await apiPost('/auth/logout', {});
-    window.location.href = '/login';
+    // After clearing the session, check if auth is still enabled so we don't
+    // strand users on the login page when auth was just turned off.
+    const sess = await apiGet('/auth/session').catch(() => ({ auth_enabled: true }));
+    window.location.href = sess.auth_enabled ? '/login' : '/';
   } catch (e) {
     toast(e.message, 'danger');
   }
