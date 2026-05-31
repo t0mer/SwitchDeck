@@ -143,3 +143,63 @@ Environment variables take precedence over built-in defaults; flags take precede
 ```
 
 Supported actions: `install`, `uninstall`, `start`, `stop`, `restart`.
+
+## Configuration
+
+All configuration is managed through the **Settings** page in the UI. No configuration files are needed.
+
+### Authentication
+
+By default SwitchDeck is open (no login required). To protect the application:
+
+1. Open **Settings → Web Access** and enter a username and password, then click **Save Credentials**.
+2. Toggle **Require login to access SwitchDeck** on.
+
+All web UI pages and API endpoints will now require authentication.
+
+To reset credentials without access to the UI:
+
+```bash
+./switchdeck --reset-password --data /var/lib/switchdeck
+```
+
+### API tokens
+
+For external integrations (Home Assistant, scripts, monitoring tools):
+
+1. Open **Settings → API Tokens** and click **+ Add Token**.
+2. Give the token a name and an optional expiry.
+3. Copy the token from the confirmation dialog — it is shown **only once**.
+
+Use the token in requests:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8080/api/v1/switches
+```
+
+### Notifications
+
+Open the **Notifications** page and click **+ Add Channel**. Supported providers:
+
+| Provider | Use case |
+|---|---|
+| **Shoutrrr** | Slack, Discord, Telegram, SMTP, ntfy, Gotify, and [many more](https://containrrr.dev/shoutrrr/) via a single URL scheme |
+| **GreenAPI** | WhatsApp messages via the GreenAPI cloud service |
+| **WhatsApp Web** | WhatsApp messages via a self-hosted `go-whatsapp-web-multidevice` instance |
+
+Each channel can be configured to notify on **switch offline**, **switch back online**, or both. Click **Send Test** to verify the configuration before saving.
+
+### Adding a switch
+
+Click **+ Add Switch** on the dashboard and fill in:
+
+| Field | Description |
+|---|---|
+| **Name** | Display name (e.g. `Core`, `Floor 2`) |
+| **IP / Hostname** | Switch management address (e.g. `192.168.0.10`) |
+| **Username / Password** | Switch admin credentials |
+| **Stats Poll** | How often to refresh counters in seconds (default: 60) |
+| **Config Poll** | How often to refresh port/VLAN config in seconds (default: 300) |
+| **Allow self-signed TLS** | Enable when the switch uses HTTPS with a self-signed certificate |
+
+SwitchDeck starts collecting data immediately after the switch is saved.
