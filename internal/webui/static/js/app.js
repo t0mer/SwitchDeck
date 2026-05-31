@@ -96,13 +96,30 @@ function toast(msg, type = 'success') {
 
 function setActiveNav() {
   const path = location.pathname;
-  document.querySelectorAll('.nav-link').forEach(a => {
+  document.querySelectorAll('.nav-link, .mobile-nav-item').forEach(a => {
     const href = a.getAttribute('href');
     const active = href === '/' ? path === '/' : path.startsWith(href);
     a.classList.toggle('active', active);
   });
 }
 setActiveNav();
+
+// ── Mobile sidebar ────────────────────────────────────────────────────────
+
+const sidebar     = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+const sidebarToggle  = document.getElementById('sidebar-toggle');
+
+function openSidebar() {
+  sidebar?.classList.add('open');
+  sidebarOverlay?.classList.add('active');
+}
+function closeSidebar() {
+  sidebar?.classList.remove('open');
+  sidebarOverlay?.classList.remove('active');
+}
+sidebarToggle?.addEventListener('click', openSidebar);
+sidebarOverlay?.addEventListener('click', closeSidebar);
 
 // ── Format helpers ────────────────────────────────────────────────────────
 
@@ -221,34 +238,53 @@ function renderSwitchGrid(switches) {
 function buildSwitchCard(sw) {
   const card = el('div', 'switch-card');
   card.dataset.id = sw.id;
-  card.style.cursor = 'pointer';
 
-  // Header
+  // ── Card body
+  const body = el('div', 'switch-card-body');
+
   const header = el('div', 'switch-card-header');
   const info = el('div');
-  const name = el('div', 'switch-name', sw.name);
-  const ip   = el('div', 'switch-ip',   sw.ip);
-  append(info, name, ip);
-  if (sw.model) append(info, el('div', 'text-sm text-muted mt-1', sw.model));
+  append(info,
+    el('div', 'switch-name', sw.name),
+    el('div', 'switch-ip',   sw.ip),
+  );
+  if (sw.model) info.appendChild(el('div', 'switch-model', sw.model));
   append(header, info, statusBadgeEl(sw.status, sw.collecting_since));
-  card.appendChild(header);
+  body.appendChild(header);
 
-  // Port stats
-  const meta = el('div', 'switch-meta');
+  // Port counts
   const up    = sw.ports_up    ?? 0;
   const down  = sw.ports_down  ?? 0;
   const total = sw.ports_total ?? 0;
 
-  for (const [val, label, cls] of [[up, 'Up', 'stat-up'], [down, 'Down', 'stat-down'], [total, 'Total', 'stat-total']]) {
+  const stats = el('div', 'switch-stats');
+  for (const [val, label, cls] of [
+    [up,    'Up',    'stat-up'],
+    [down,  'Down',  'stat-down'],
+    [total, 'Total', 'stat-total'],
+  ]) {
     const stat = el('div', 'switch-stat');
-    const v = el('div', `switch-stat-value ${cls}`, String(val));
-    const l = el('div', 'switch-stat-label', label);
-    append(stat, v, l);
-    meta.appendChild(stat);
+    append(stat,
+      el('div', `switch-stat-value ${cls}`, String(val)),
+      el('div', 'switch-stat-label', label),
+    );
+    stats.appendChild(stat);
   }
-  card.appendChild(meta);
+  body.appendChild(stats);
+  card.appendChild(body);
 
-  // Actions
+  // ── Port LED strip
+  const ledStrip = el('div', 'port-led-strip');
+  const ledLabel = el('span', 'port-led-label', 'Ports');
+  const leds = el('div', 'port-leds');
+  const portCount = total || 8;
+  for (let i = 0; i < portCount; i++) {
+    leds.appendChild(el('div', 'port-led ' + (i < up ? 'led-up' : 'led-down')));
+  }
+  append(ledStrip, ledLabel, leds);
+  card.appendChild(ledStrip);
+
+  // ── Actions
   const actions = el('div', 'switch-card-actions');
 
   const editBtn = el('button', 'btn btn-ghost btn-sm', 'Edit');
