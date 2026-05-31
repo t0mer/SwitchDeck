@@ -305,6 +305,19 @@ The REST API is available under `/api/v1`. When authentication is enabled, inclu
 | `POST` | `/api/v1/auth/logout` | Destroy the current session |
 | `GET` | `/api/v1/auth/session` | Check auth status |
 
+### Backup
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/backup` | Required | Download a full config backup as JSON |
+| `POST` | `/api/v1/backup/restore` | Required | Restore from a backup file (`multipart/form-data` field `file` or raw JSON body) |
+
+### Metrics
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/metrics` | None | Prometheus metrics (reads worker cache — no switch logins triggered) |
+
 ## License
 
 [MIT](LICENSE)
