@@ -61,10 +61,18 @@ func (h *UIHandler) Settings(w http.ResponseWriter, r *http.Request) {
 	h.renderPage(w, "settings.html", nil)
 }
 
-// Login handles GET /login.
+// Login handles GET /login — standalone page, no sidebar layout.
 func (h *UIHandler) Login(w http.ResponseWriter, r *http.Request) {
-	// Stub — template added in Task 8
-	http.Error(w, "login page coming soon", http.StatusNotImplemented)
+	tmpl, err := template.ParseFS(h.tmplFS, "login.html")
+	if err != nil {
+		log.Printf("template parse error: %v", err)
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.Execute(w, nil); err != nil {
+		log.Printf("template execute error: %v", err)
+	}
 }
 
 func (h *UIHandler) renderPage(w http.ResponseWriter, page string, data any) {
