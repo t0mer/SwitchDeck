@@ -203,3 +203,55 @@ Click **+ Add Switch** on the dashboard and fill in:
 | **Allow self-signed TLS** | Enable when the switch uses HTTPS with a self-signed certificate |
 
 SwitchDeck starts collecting data immediately after the switch is saved.
+
+## API
+
+The REST API is available under `/api/v1`. When authentication is enabled, include either a session cookie (obtained via `POST /api/v1/auth/login`) or an `Authorization: Bearer <token>` header.
+
+### Switches
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/switches` | List all switches |
+| `POST` | `/api/v1/switches` | Add a switch |
+| `GET` | `/api/v1/switches/{id}` | Get a single switch |
+| `PUT` | `/api/v1/switches/{id}` | Update switch configuration |
+| `DELETE` | `/api/v1/switches/{id}` | Remove a switch |
+| `POST` | `/api/v1/switches/{id}/collect` | Trigger an immediate data collection |
+| `GET` | `/api/v1/switches/{id}/ports` | List ports |
+| `PUT` | `/api/v1/switches/{id}/ports/{port}` | Update port settings (enable/disable, speed, etc.) |
+| `GET` | `/api/v1/switches/{id}/stats` | Port statistics |
+| `GET` | `/api/v1/switches/{id}/vlans` | VLAN table |
+| `POST` | `/api/v1/switches/{id}/reboot` | Reboot the switch |
+
+### Settings
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/settings` | Get current settings |
+| `PUT` | `/api/v1/settings` | Update settings |
+| `GET` | `/api/v1/settings/tokens` | List API tokens |
+| `POST` | `/api/v1/settings/tokens` | Create an API token (returns plaintext once) |
+| `DELETE` | `/api/v1/settings/tokens/{id}` | Revoke an API token |
+
+### Notifications
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/notifications` | List notification channels |
+| `POST` | `/api/v1/notifications` | Add a channel |
+| `PUT` | `/api/v1/notifications/{id}` | Update a channel |
+| `DELETE` | `/api/v1/notifications/{id}` | Remove a channel |
+| `POST` | `/api/v1/notifications/test` | Send a test message |
+
+### Auth
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/auth/login` | Create a session (returns session cookie) |
+| `POST` | `/api/v1/auth/logout` | Destroy the current session |
+| `GET` | `/api/v1/auth/session` | Check auth status |
+
+## License
+
+[MIT](LICENSE)
