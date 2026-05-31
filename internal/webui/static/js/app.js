@@ -524,7 +524,7 @@ function renderSystemTab(snap) {
   container.appendChild(grid);
 }
 
-function renderPortsTab(snap, switchId) {
+async function renderPortsTab(snap, switchId) {
   const container = document.getElementById('tab-ports');
   if (!container) return;
   container.textContent = '';
@@ -535,11 +535,15 @@ function renderPortsTab(snap, switchId) {
     return;
   }
 
+  // Load user-defined port names; fall back to empty map on error.
+  let portNames = {};
+  try { portNames = await apiGet(`/switches/${switchId}/port-names`); } catch (_) {}
+
   const wrapper = el('div', 'table-wrapper');
   const table   = el('table');
   const thead   = el('thead');
   const hr      = el('tr');
-  for (const h of ['Port', 'Status', 'Speed', 'Duplex', 'Description', 'Enabled']) {
+  for (const h of ['Port', 'Name', 'Status', 'Speed', 'Duplex', 'Description', 'Enabled']) {
     hr.appendChild(el('th', null, h));
   }
   thead.appendChild(hr);
@@ -550,6 +554,35 @@ function renderPortsTab(snap, switchId) {
     const row = el('tr');
 
     const numCell = el('td', 'port-num', String(p.number));
+
+    // ── inline-editable name cell ──────────────────────────────────────
+    const nameCell = el('td', 'port-name-cell');
+    const defaultName = `Port ${p.number}`;
+    const currentName = portNames[p.number] || '';
+    const nameInput = el('input');
+    nameInput.type = 'text';
+    nameInput.className = 'port-name-input';
+    nameInput.value = currentName;
+    nameInput.placeholder = defaultName;
+    nameInput.title = 'Click to edit port name';
+
+    const savePortName = async () => {
+      const newName = nameInput.value.trim();
+      if (newName === currentName) return;
+      try {
+        await apiPut(`/switches/${switchId}/port-names/${p.number}`, { name: newName });
+        portNames[p.number] = newName;
+        nameInput.value = newName;
+        toast(`Port ${p.number} name ${newName ? 'saved' : 'reset'}`);
+      } catch (e) {
+        nameInput.value = currentName;
+        toast('Failed: ' + e.message, 'danger');
+      }
+    };
+    nameInput.addEventListener('blur', savePortName);
+    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
+    nameCell.appendChild(nameInput);
+
     const statusCell = el('td');
     statusCell.appendChild(portStatusEl(p.status));
     const speedCell = el('td', null, p.speed || '—');
@@ -567,7 +600,7 @@ function renderPortsTab(snap, switchId) {
     append(label, checkbox, track);
     toggleCell.appendChild(label);
 
-    append(row, numCell, statusCell, speedCell, duplexCell, descCell, toggleCell);
+    append(row, numCell, nameCell, statusCell, speedCell, duplexCell, descCell, toggleCell);
     tbody.appendChild(row);
   }
   table.appendChild(tbody);

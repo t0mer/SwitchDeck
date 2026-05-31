@@ -460,6 +460,24 @@ tbody tr:last-child td{border-bottom:none}
 tbody tr{transition:background .1s}
 tbody tr:hover{background:var(--surface-2)}
 
+.port-name-cell{min-width:120px}
+.port-name-input{
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:var(--radius-sm);
+  color:var(--text);
+  font-size:13px;
+  padding:2px 6px;
+  width:100%;
+  transition:border-color .15s,background .15s;
+}
+.port-name-input:hover{border-color:var(--border)}
+.port-name-input:focus{
+  outline:none;
+  border-color:var(--accent);
+  background:var(--surface-2);
+}
+.port-name-input::placeholder{color:var(--text-muted);font-style:italic}
 .port-num{
   font-family:var(--font-mono);
   font-size:12px;
