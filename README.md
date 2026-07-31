@@ -24,37 +24,37 @@ Built in Go with an embedded web UI — a single binary, no external dependencie
 ## Screenshots
 
 ### Dashboard — Dark Mode
-![Dashboard dark](assets/screenshots/dashboard-dark.png)
+![Dashboard dark](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/dashboard-dark.png)
 
 ### Dashboard — Light Mode
-![Dashboard light](assets/screenshots/dashboard-light.png)
+![Dashboard light](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/dashboard-light.png)
 
 ### Switch Detail — Ports
-![Switch ports](assets/screenshots/switch-detail-ports.png)
+![Switch ports](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/switch-detail-ports.png)
 
 ### Switch Detail — Statistics
-![Switch statistics](assets/screenshots/switch-detail-stats.png)
+![Switch statistics](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/switch-detail-stats.png)
 
 ### Switch Detail — System Info
-![Switch system](assets/screenshots/switch-detail-system.png)
+![Switch system](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/switch-detail-system.png)
 
 ### Add Switch
-![Add switch modal](assets/screenshots/add-switch-modal.png)
+![Add switch modal](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/add-switch-modal.png)
 
 ### Notifications
-![Notifications page](assets/screenshots/notifications.png)
+![Notifications page](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/notifications.png)
 
 ### Add Notification Channel
-![Add channel modal](assets/screenshots/add-channel-modal.png)
+![Add channel modal](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/add-channel-modal.png)
 
 ### Settings
-![Settings page](assets/screenshots/settings.png)
+![Settings page](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/settings.png)
 
 ### Backup & Restore
-![Backup and restore](assets/screenshots/settings-backup.png)
+![Backup and restore](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/settings-backup.png)
 
 ### Login
-![Login page](assets/screenshots/login.png)
+![Login page](https://raw.githubusercontent.com/t0mer/SwitchDeck/main/assets/screenshots/login.png)
 
 ## Installation
 
